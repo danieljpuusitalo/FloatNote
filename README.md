@@ -72,7 +72,7 @@ If it starts to feel like a full note-taking platform, something has gone wrong.
 
 ## 🛣 Roadmap
 
-[] Haha, let's see
+Haha, let's see
 
 ---
 
