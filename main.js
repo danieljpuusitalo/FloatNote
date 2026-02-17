@@ -7,7 +7,8 @@ const DATA_PATH = path.join(app.getPath('userData'), 'floatnote-data.json');
 const DEFAULT_STATE = {
   notes: { professional: '', personal: '' },
   checklist: { professional: [], personal: [] },
-  completionLog: []
+  completionLog: [],
+  preferences: null
 };
 
 function loadData() {

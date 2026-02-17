@@ -42,9 +42,96 @@
       position: fixed;
       top: -40%; left: -20%;
       width: 80%; height: 80%;
-      background: radial-gradient(ellipse, rgba(180, 142, 255, 0.05) 0%, transparent 70%);
+      background: radial-gradient(ellipse, var(--accent-glow) 0%, transparent 70%);
       pointer-events: none;
       z-index: 0;
+    }
+
+    /* Onboarding overlay */
+    .onboarding-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      background: var(--bg-deep);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      -webkit-app-region: drag;
+    }
+    .onboarding-overlay.hidden { display: none; }
+    .onboarding-card {
+      -webkit-app-region: no-drag;
+      width: 320px;
+      text-align: center;
+    }
+    .onboarding-card h1 {
+      font-size: 22px;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent), var(--blue));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 6px;
+    }
+    .onboarding-card p {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 22px;
+    }
+    .onboarding-field {
+      margin-bottom: 14px;
+      text-align: left;
+    }
+    .onboarding-field label {
+      display: block;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+    .onboarding-field input,
+    .onboarding-field select {
+      width: 100%;
+      padding: 10px 12px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .onboarding-field input:focus,
+    .onboarding-field select:focus {
+      border-color: var(--accent);
+    }
+    .onboarding-field select option {
+      background: var(--bg-surface);
+      color: var(--text-primary);
+    }
+    .onboarding-btn {
+      width: 100%;
+      padding: 11px;
+      margin-top: 8px;
+      background: var(--accent);
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+      font-family: inherit;
+    }
+    .onboarding-btn:hover { opacity: 0.85; }
+    .onboarding-error {
+      color: var(--red);
+      font-size: 11px;
+      margin-top: 6px;
+      min-height: 16px;
     }
 
     /* Title bar */
@@ -189,8 +276,8 @@
 
     /* Stoic Quote */
     .quote-card {
-      background: linear-gradient(135deg, rgba(180, 142, 255, 0.08), rgba(91, 156, 245, 0.05));
-      border: 1px solid rgba(180, 142, 255, 0.12);
+      background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, transparent), rgba(91, 156, 245, 0.05));
+      border: 1px solid color-mix(in srgb, var(--accent) 12%, transparent);
       border-radius: 12px;
       padding: 16px 18px;
       margin-bottom: 14px;
@@ -199,14 +286,14 @@
       cursor: pointer;
       transition: border-color 0.2s;
     }
-    .quote-card:hover { border-color: rgba(180, 142, 255, 0.25); }
+    .quote-card:hover { border-color: color-mix(in srgb, var(--accent) 25%, transparent); }
     .quote-card::before {
       content: '\201C';
       position: absolute;
       top: -4px; left: 10px;
       font-size: 52px;
       font-family: Georgia, 'Times New Roman', serif;
-      color: rgba(180, 142, 255, 0.12);
+      color: color-mix(in srgb, var(--accent) 12%, transparent);
       pointer-events: none;
       line-height: 1;
     }
@@ -350,6 +437,30 @@
   </style>
 </head>
 <body>
+  <!-- Onboarding -->
+  <div class="onboarding-overlay hidden" id="onboarding">
+    <div class="onboarding-card">
+      <h1>Welcome to FloatNote</h1>
+      <p>Let's personalize your experience.</p>
+      <div class="onboarding-field">
+        <label>Your Name</label>
+        <input type="text" id="onboard-name" placeholder="Enter your name" maxlength="30" autocomplete="off">
+      </div>
+      <div class="onboarding-field">
+        <label>Accent Colour</label>
+        <select id="onboard-color">
+          <option value="purple">Purple</option>
+          <option value="blue">Blue</option>
+          <option value="green">Green</option>
+          <option value="pink">Pink</option>
+          <option value="gold">Gold</option>
+        </select>
+      </div>
+      <button class="onboarding-btn" id="onboard-go">Get Started</button>
+      <div class="onboarding-error" id="onboard-error"></div>
+    </div>
+  </div>
+
   <div class="titlebar">
     <span class="titlebar-title">FloatNote</span>
     <div class="titlebar-buttons">
@@ -499,11 +610,29 @@
 
     document.getElementById('quote-card').addEventListener('click', () => showQuote(true));
 
+    // --- Colour themes ---
+    const COLOUR_MAP = {
+      purple: { accent: '#b48eff', glow: 'rgba(180, 142, 255, 0.25)' },
+      blue:   { accent: '#5b9cf5', glow: 'rgba(91, 156, 245, 0.25)' },
+      green:  { accent: '#6dd4a0', glow: 'rgba(109, 212, 160, 0.25)' },
+      pink:   { accent: '#f06292', glow: 'rgba(240, 98, 146, 0.25)' },
+      gold:   { accent: '#ffd180', glow: 'rgba(255, 209, 128, 0.25)' }
+    };
+
+    function applyPreferences(prefs) {
+      if (!prefs) return;
+      const theme = COLOUR_MAP[prefs.color] || COLOUR_MAP.purple;
+      document.documentElement.style.setProperty('--accent', theme.accent);
+      document.documentElement.style.setProperty('--accent-glow', theme.glow);
+      document.querySelector('.titlebar-title').textContent = prefs.name + "'s FloatNote";
+    }
+
     // --- State ---
     let state = {
       notes: { professional: '', personal: '' },
       checklist: { professional: [], personal: [] },
-      completionLog: []
+      completionLog: [],
+      preferences: null
     };
     let saveTimeout = null;
     let activeNotesCategory = 'professional';
@@ -516,6 +645,14 @@
       state.notes = loaded.notes || { professional: '', personal: '' };
       state.checklist = loaded.checklist || { professional: [], personal: [] };
       state.completionLog = loaded.completionLog || [];
+      state.preferences = loaded.preferences || null;
+
+      if (state.preferences) {
+        applyPreferences(state.preferences);
+      } else {
+        document.getElementById('onboarding').classList.remove('hidden');
+      }
+
       document.getElementById('notes-editor').value = state.notes[activeNotesCategory] || '';
       renderChecklist();
       renderDashboard();
@@ -888,6 +1025,24 @@
     // --- Window controls ---
     document.getElementById('btn-min').addEventListener('click', () => window.api.minimize());
     document.getElementById('btn-close').addEventListener('click', () => window.api.close());
+
+    // --- Onboarding ---
+    document.getElementById('onboard-go').addEventListener('click', () => {
+      const name = document.getElementById('onboard-name').value.trim();
+      if (!name) {
+        document.getElementById('onboard-error').textContent = 'Please enter your name.';
+        return;
+      }
+      const color = document.getElementById('onboard-color').value;
+      state.preferences = { name, color };
+      applyPreferences(state.preferences);
+      scheduleSave();
+      document.getElementById('onboarding').classList.add('hidden');
+    });
+
+    document.getElementById('onboard-name').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') document.getElementById('onboard-go').click();
+    });
 
     // --- Init ---
     showQuote(false);
