@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Daniel's Anti-Notion FloatNote</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg-deep: #0f0f1a;
+      --bg-surface: #1e1e32;
+      --bg-overlay: #252540;
+      --bg-card: rgba(255, 255, 255, 0.04);
+      --bg-card-hover: rgba(255, 255, 255, 0.07);
+      --text-primary: #e2e4f0;
+      --text-secondary: #8b8da8;
+      --text-muted: #5a5c74;
+      --accent: #b48eff;
+      --accent-glow: rgba(180, 142, 255, 0.25);
+      --blue: #5b9cf5;
+      --green: #6dd4a0;
+      --red: #f06292;
+      --yellow: #ffd180;
+      --border: rgba(255, 255, 255, 0.06);
+      --border-light: rgba(255, 255, 255, 0.1);
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg-deep);
+      color: var(--text-primary);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Single ambient glow - lightweight */
+    body::before {
+      content: '';
+      position: fixed;
+      top: -40%; left: -20%;
+      width: 80%; height: 80%;
+      background: radial-gradient(ellipse, rgba(180, 142, 255, 0.05) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Title bar */
+    .titlebar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(15, 15, 26, 0.95);
+      padding: 8px 14px;
+      -webkit-app-region: drag;
+      user-select: none;
+      flex-shrink: 0;
+      border-bottom: 1px solid var(--border);
+      position: relative;
+      z-index: 10;
+    }
+    .titlebar-title {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      background: linear-gradient(135deg, var(--accent), var(--blue));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-transform: uppercase;
+    }
+    .titlebar-buttons { display: flex; gap: 8px; -webkit-app-region: no-drag; }
+    .titlebar-btn {
+      width: 13px; height: 13px; border-radius: 50%; border: none; cursor: pointer;
+      transition: transform 0.15s; opacity: 0.8;
+    }
+    .titlebar-btn:hover { opacity: 1; transform: scale(1.15); }
+    .btn-minimize { background: var(--yellow); }
+    .btn-close { background: var(--red); }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      background: rgba(15, 15, 26, 0.9);
+      flex-shrink: 0;
+      padding: 0 8px;
+      gap: 2px;
+      border-bottom: 1px solid var(--border);
+      position: relative;
+      z-index: 10;
+    }
+    .tab {
+      flex: 1; padding: 10px 8px; text-align: center; font-size: 11px; font-weight: 600;
+      cursor: pointer; border-bottom: 2px solid transparent; color: var(--text-muted);
+      transition: color 0.2s, border-color 0.2s; letter-spacing: 0.3px;
+    }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab:hover:not(.active) { color: var(--text-secondary); }
+
+    /* Category toggle */
+    .category-bar {
+      display: flex; background: rgba(15, 15, 26, 0.6); flex-shrink: 0;
+      padding: 8px 14px; gap: 8px; position: relative; z-index: 10;
+    }
+    .cat-btn {
+      flex: 1; padding: 7px; text-align: center; font-size: 11px; font-weight: 600;
+      border: 1px solid var(--border-light); border-radius: 8px; background: transparent;
+      color: var(--text-muted); cursor: pointer; transition: all 0.2s; letter-spacing: 0.3px;
+    }
+    .cat-btn:hover { background: var(--bg-card-hover); color: var(--text-secondary); }
+    .cat-btn.active-pro {
+      background: rgba(91, 156, 245, 0.15);
+      color: var(--blue); border-color: rgba(91, 156, 245, 0.3);
+    }
+    .cat-btn.active-per {
+      background: rgba(109, 212, 160, 0.15);
+      color: var(--green); border-color: rgba(109, 212, 160, 0.3);
+    }
+
+    /* Panels */
+    .panel {
+      flex: 1; display: none; flex-direction: column; overflow: hidden;
+      position: relative; z-index: 5;
+    }
+    .panel.active { display: flex; }
+
+    /* Notes */
+    .notes-editor {
+      flex: 1; background: transparent; color: var(--text-primary); border: none; padding: 16px;
+      font-family: 'Segoe UI', system-ui, sans-serif; font-size: 13.5px; line-height: 1.7;
+      resize: none; outline: none; letter-spacing: 0.2px;
+    }
+    .notes-editor::placeholder { color: var(--text-muted); font-style: italic; }
+
+    /* Checklist */
+    .checklist-items { flex: 1; overflow-y: auto; padding: 8px 14px; }
+
+    .inline-input {
+      display: flex; align-items: center; gap: 10px; padding: 8px 8px; margin-top: 4px;
+    }
+    .inline-input .bullet {
+      width: 16px; height: 16px; border: 2px solid var(--text-muted); border-radius: 4px;
+      flex-shrink: 0; opacity: 0.5;
+    }
+    .inline-input input {
+      flex: 1; background: transparent; border: none;
+      border-bottom: 1px solid var(--border-light);
+      color: var(--text-primary); font-size: 13px; padding: 6px 0; outline: none;
+      font-family: 'Segoe UI', system-ui, sans-serif; transition: border-color 0.2s;
+    }
+    .inline-input input:focus { border-bottom-color: var(--accent); }
+    .inline-input input::placeholder { color: var(--text-muted); font-style: italic; }
+
+    .checklist-item {
+      display: flex; align-items: center; gap: 10px; padding: 9px 8px;
+      border-radius: 8px; transition: background 0.15s; border: 1px solid transparent;
+    }
+    .checklist-item:hover {
+      background: var(--bg-card-hover); border-color: var(--border);
+    }
+    .checklist-item input[type="checkbox"] {
+      appearance: none; -webkit-appearance: none;
+      width: 17px; height: 17px; border: 2px solid var(--text-muted);
+      border-radius: 4px; cursor: pointer; flex-shrink: 0;
+      transition: all 0.15s; position: relative; background: transparent;
+    }
+    .checklist-item input[type="checkbox"]:checked {
+      background: var(--accent); border-color: var(--accent);
+    }
+    .checklist-item input[type="checkbox"]:checked::after {
+      content: '';
+      position: absolute; left: 4px; top: 1px;
+      width: 5px; height: 9px;
+      border: solid white; border-width: 0 2px 2px 0;
+      transform: rotate(45deg);
+    }
+    .checklist-item .item-text { flex: 1; font-size: 13px; cursor: default; }
+    .checklist-item.checked .item-text { text-decoration: line-through; color: var(--text-muted); }
+    .checklist-item .delete-btn {
+      background: none; border: none; color: var(--text-muted); cursor: pointer;
+      font-size: 16px; padding: 0 4px; opacity: 0; transition: opacity 0.15s;
+    }
+    .checklist-item:hover .delete-btn { opacity: 1; }
+    .checklist-item .delete-btn:hover { color: var(--red); }
+
+    /* Dashboard */
+    .dashboard { flex: 1; overflow-y: auto; padding: 14px; }
+
+    /* Stoic Quote */
+    .quote-card {
+      background: linear-gradient(135deg, rgba(180, 142, 255, 0.08), rgba(91, 156, 245, 0.05));
+      border: 1px solid rgba(180, 142, 255, 0.12);
+      border-radius: 12px;
+      padding: 16px 18px;
+      margin-bottom: 14px;
+      position: relative;
+      overflow: hidden;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .quote-card:hover { border-color: rgba(180, 142, 255, 0.25); }
+    .quote-card::before {
+      content: '\201C';
+      position: absolute;
+      top: -4px; left: 10px;
+      font-size: 52px;
+      font-family: Georgia, 'Times New Roman', serif;
+      color: rgba(180, 142, 255, 0.12);
+      pointer-events: none;
+      line-height: 1;
+    }
+    .quote-text {
+      font-family: Georgia, 'Times New Roman', serif;
+      font-style: italic;
+      font-size: 13.5px;
+      line-height: 1.6;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+      padding-left: 4px;
+      transition: opacity 0.35s;
+    }
+    .quote-text.fading { opacity: 0; }
+    .quote-author {
+      font-size: 10.5px;
+      font-weight: 600;
+      color: var(--accent);
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      text-align: right;
+      transition: opacity 0.35s;
+    }
+    .quote-author.fading { opacity: 0; }
+    .quote-hint {
+      position: absolute;
+      bottom: 6px; left: 18px;
+      font-size: 9px;
+      color: var(--text-muted);
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .quote-card:hover .quote-hint { opacity: 1; }
+
+    /* Stats */
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      text-align: center;
+      transition: background 0.2s, border-color 0.2s, transform 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .stat-card:hover::before { opacity: 1; }
+    .stat-card:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--border-light);
+      transform: translateY(-1px);
+    }
+    .stat-card:nth-child(1)::before { background: linear-gradient(90deg, transparent, var(--accent), transparent); }
+    .stat-card:nth-child(2)::before { background: linear-gradient(90deg, transparent, var(--yellow), transparent); }
+    .stat-card:nth-child(3)::before { background: linear-gradient(90deg, transparent, var(--blue), transparent); }
+    .stat-card:nth-child(4)::before { background: linear-gradient(90deg, transparent, var(--green), transparent); }
+    .stat-icon { font-size: 18px; margin-bottom: 2px; }
+    .stat-value {
+      font-size: 26px; font-weight: 700;
+      background: linear-gradient(135deg, var(--accent), #d4a8ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      line-height: 1.2;
+    }
+    .stat-label {
+      font-size: 10px; color: var(--text-muted); margin-top: 3px;
+      text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500;
+    }
+    .stat-value.blue {
+      background: linear-gradient(135deg, var(--blue), #82b5f7);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .stat-value.green {
+      background: linear-gradient(135deg, var(--green), #9ae8c0);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .stat-value.yellow {
+      background: linear-gradient(135deg, var(--yellow), #ffe0a0);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+
+    /* Chart */
+    .chart-container {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+    }
+    .chart-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .chart-title {
+      font-size: 11px; font-weight: 600; color: var(--text-secondary);
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .chart-toggle {
+      display: flex; gap: 4px;
+    }
+    .chart-toggle-btn {
+      padding: 3px 10px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      border: 1px solid var(--border-light);
+      border-radius: 6px;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s;
+      font-family: inherit;
+    }
+    .chart-toggle-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .chart-toggle-btn:hover:not(.active) {
+      color: var(--text-secondary);
+      background: var(--bg-card-hover);
+    }
+    canvas { width: 100% !important; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--bg-overlay); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+    ::selection { background: var(--accent-glow); color: white; }
+  </style>
+</head>
+<body>
+  <div class="titlebar">
+    <span class="titlebar-title">FloatNote</span>
+    <div class="titlebar-buttons">
+      <button class="titlebar-btn btn-minimize" id="btn-min"></button>
+      <button class="titlebar-btn btn-close" id="btn-close"></button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="dashboard">Dashboard</div>
+    <div class="tab" data-tab="notes">Notes</div>
+    <div class="tab" data-tab="checklist">Checklist</div>
+  </div>
+
+  <!-- Dashboard -->
+  <div class="panel active" id="panel-dashboard">
+    <div class="dashboard">
+      <div class="quote-card" id="quote-card" title="Click for a new quote">
+        <div class="quote-text" id="quote-text"></div>
+        <div class="quote-author" id="quote-author"></div>
+        <div class="quote-hint">click for another</div>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon">&#x1F3AF;</div>
+          <div class="stat-value" id="stat-total">0</div>
+          <div class="stat-label">Completed</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">&#x1F4CB;</div>
+          <div class="stat-value yellow" id="stat-pending">0</div>
+          <div class="stat-label">Open Tasks</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">&#x1F4BC;</div>
+          <div class="stat-value blue" id="stat-pro">0</div>
+          <div class="stat-label">Professional</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">&#x1F331;</div>
+          <div class="stat-value green" id="stat-per">0</div>
+          <div class="stat-label">Personal</div>
+        </div>
+      </div>
+      <div class="chart-container">
+        <div class="chart-header">
+          <div class="chart-title">Productivity</div>
+          <div class="chart-toggle">
+            <button class="chart-toggle-btn active" id="chart-daily">Daily</button>
+            <button class="chart-toggle-btn" id="chart-cumulative">Cumulative</button>
+          </div>
+        </div>
+        <canvas id="chart" height="180"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notes -->
+  <div class="panel" id="panel-notes">
+    <div class="category-bar">
+      <button class="cat-btn active-pro" data-cat="professional" id="notes-cat-pro">Professional</button>
+      <button class="cat-btn" data-cat="personal" id="notes-cat-per">Personal</button>
+    </div>
+    <textarea class="notes-editor" id="notes-editor" placeholder="Start typing..."></textarea>
+  </div>
+
+  <!-- Checklist -->
+  <div class="panel" id="panel-checklist">
+    <div class="category-bar">
+      <button class="cat-btn active-pro" data-cat="professional" id="cl-cat-pro">Professional</button>
+      <button class="cat-btn" data-cat="personal" id="cl-cat-per">Personal</button>
+    </div>
+    <div class="checklist-items" id="checklist-items"></div>
+  </div>
+
+  <script>
+    // --- Stoic Quotes ---
+    const STOIC_QUOTES = [
+      { text: "We suffer more often in imagination than in reality.", author: "Seneca" },
+      { text: "The happiness of your life depends upon the quality of your thoughts.", author: "Marcus Aurelius" },
+      { text: "Man is not worried by real problems so much as by his imagined anxieties about real problems.", author: "Epictetus" },
+      { text: "Waste no more time arguing about what a good man should be. Be one.", author: "Marcus Aurelius" },
+      { text: "He who fears death will never do anything worthy of a man who is alive.", author: "Seneca" },
+      { text: "It is not that we have a short time to live, but that we waste a great deal of it.", author: "Seneca" },
+      { text: "You have power over your mind, not outside events. Realize this, and you will find strength.", author: "Marcus Aurelius" },
+      { text: "First say to yourself what you would be; and then do what you have to do.", author: "Epictetus" },
+      { text: "The best revenge is not to be like your enemy.", author: "Marcus Aurelius" },
+      { text: "Difficulties strengthen the mind, as labor does the body.", author: "Seneca" },
+      { text: "No man is free who is not master of himself.", author: "Epictetus" },
+      { text: "If it is not right, do not do it; if it is not true, do not say it.", author: "Marcus Aurelius" },
+      { text: "We are more often frightened than hurt; and we suffer more from imagination than from reality.", author: "Seneca" },
+      { text: "How long are you going to wait before you demand the best for yourself?", author: "Epictetus" },
+      { text: "The soul becomes dyed with the colour of its thoughts.", author: "Marcus Aurelius" },
+      { text: "True happiness is to enjoy the present, without anxious dependence upon the future.", author: "Seneca" },
+      { text: "Make the best use of what is in your power, and take the rest as it happens.", author: "Epictetus" },
+      { text: "Very little is needed to make a happy life; it is all within yourself, in your way of thinking.", author: "Marcus Aurelius" },
+      { text: "Luck is what happens when preparation meets opportunity.", author: "Seneca" },
+      { text: "It's not what happens to you, but how you react to it that matters.", author: "Epictetus" },
+      { text: "Never let the future disturb you. You will meet it, if you have to, with the same weapons of reason which today arm you against the present.", author: "Marcus Aurelius" },
+      { text: "A gem cannot be polished without friction, nor a man perfected without trials.", author: "Seneca" },
+      { text: "Wealth consists not in having great possessions, but in having few wants.", author: "Epictetus" },
+      { text: "The impediment to action advances action. What stands in the way becomes the way.", author: "Marcus Aurelius" },
+      { text: "Begin at once to live, and count each separate day as a separate life.", author: "Seneca" },
+      { text: "Don't explain your philosophy. Embody it.", author: "Epictetus" },
+      { text: "When you arise in the morning, think of what a precious privilege it is to be alive.", author: "Marcus Aurelius" },
+      { text: "As is a tale, so is life: not how long it is, but how good it is, is what matters.", author: "Seneca" },
+      { text: "Only the educated are free.", author: "Epictetus" },
+      { text: "Dwell on the beauty of life. Watch the stars, and see yourself running with them.", author: "Marcus Aurelius" },
+      { text: "Every new beginning comes from some other beginning's end.", author: "Seneca" },
+      { text: "He is a wise man who does not grieve for the things which he has not, but rejoices for those which he has.", author: "Epictetus" },
+      { text: "Accept the things to which fate binds you, and love the people with whom fate brings you together.", author: "Marcus Aurelius" },
+      { text: "Sometimes even to live is an act of courage.", author: "Seneca" },
+      { text: "There is only one way to happiness and that is to cease worrying about things which are beyond the power of our will.", author: "Epictetus" },
+      { text: "The object of life is not to be on the side of the majority, but to escape finding oneself in the ranks of the insane.", author: "Marcus Aurelius" },
+    ];
+
+    let currentQuoteIndex = -1;
+
+    function getRandomQuote() {
+      let idx;
+      do {
+        idx = Math.floor(Math.random() * STOIC_QUOTES.length);
+      } while (idx === currentQuoteIndex && STOIC_QUOTES.length > 1);
+      currentQuoteIndex = idx;
+      return STOIC_QUOTES[idx];
+    }
+
+    function showQuote(animate) {
+      const textEl = document.getElementById('quote-text');
+      const authorEl = document.getElementById('quote-author');
+      if (animate) {
+        textEl.classList.add('fading');
+        authorEl.classList.add('fading');
+        setTimeout(() => {
+          const q = getRandomQuote();
+          textEl.textContent = q.text;
+          authorEl.textContent = '\u2014 ' + q.author;
+          textEl.classList.remove('fading');
+          authorEl.classList.remove('fading');
+        }, 350);
+      } else {
+        const q = getRandomQuote();
+        textEl.textContent = q.text;
+        authorEl.textContent = '\u2014 ' + q.author;
+      }
+    }
+
+    document.getElementById('quote-card').addEventListener('click', () => showQuote(true));
+
+    // --- State ---
+    let state = {
+      notes: { professional: '', personal: '' },
+      checklist: { professional: [], personal: [] },
+      completionLog: []
+    };
+    let saveTimeout = null;
+    let activeNotesCategory = 'professional';
+    let activeChecklistCategory = 'professional';
+    let chartMode = 'daily'; // 'daily' or 'cumulative'
+
+    // --- Persistence ---
+    async function load() {
+      const loaded = await window.api.loadData();
+      state.notes = loaded.notes || { professional: '', personal: '' };
+      state.checklist = loaded.checklist || { professional: [], personal: [] };
+      state.completionLog = loaded.completionLog || [];
+      document.getElementById('notes-editor').value = state.notes[activeNotesCategory] || '';
+      renderChecklist();
+      renderDashboard();
+    }
+
+    function scheduleSave() {
+      clearTimeout(saveTimeout);
+      saveTimeout = setTimeout(() => window.api.saveData(state), 300);
+    }
+
+    function todayStr() {
+      return new Date().toISOString().slice(0, 10);
+    }
+
+    // --- Tabs ---
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+        if (tab.dataset.tab === 'dashboard') renderDashboard();
+      });
+    });
+
+    // --- Notes category toggle ---
+    function setNotesCategory(cat) {
+      activeNotesCategory = cat;
+      document.getElementById('notes-cat-pro').className = 'cat-btn' + (cat === 'professional' ? ' active-pro' : '');
+      document.getElementById('notes-cat-per').className = 'cat-btn' + (cat === 'personal' ? ' active-per' : '');
+      document.getElementById('notes-editor').value = state.notes[cat] || '';
+    }
+    document.getElementById('notes-cat-pro').addEventListener('click', () => setNotesCategory('professional'));
+    document.getElementById('notes-cat-per').addEventListener('click', () => setNotesCategory('personal'));
+
+    document.getElementById('notes-editor').addEventListener('input', (e) => {
+      state.notes[activeNotesCategory] = e.target.value;
+      scheduleSave();
+    });
+
+    // --- Checklist category toggle ---
+    function setChecklistCategory(cat) {
+      activeChecklistCategory = cat;
+      document.getElementById('cl-cat-pro').className = 'cat-btn' + (cat === 'professional' ? ' active-pro' : '');
+      document.getElementById('cl-cat-per').className = 'cat-btn' + (cat === 'personal' ? ' active-per' : '');
+      renderChecklist();
+    }
+    document.getElementById('cl-cat-pro').addEventListener('click', () => setChecklistCategory('professional'));
+    document.getElementById('cl-cat-per').addEventListener('click', () => setChecklistCategory('personal'));
+
+    // --- Checklist ---
+    function renderChecklist() {
+      const cat = activeChecklistCategory;
+      const items = state.checklist[cat] || [];
+      const container = document.getElementById('checklist-items');
+      container.innerHTML = '';
+
+      items.forEach((item, i) => {
+        const div = document.createElement('div');
+        div.className = 'checklist-item' + (item.done ? ' checked' : '');
+
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = item.done;
+        cb.addEventListener('change', () => {
+          const wasDone = state.checklist[cat][i].done;
+          state.checklist[cat][i].done = cb.checked;
+          if (cb.checked && !wasDone) {
+            state.completionLog.push({ date: todayStr(), category: cat });
+          } else if (!cb.checked && wasDone) {
+            for (let j = state.completionLog.length - 1; j >= 0; j--) {
+              if (state.completionLog[j].category === cat) {
+                state.completionLog.splice(j, 1);
+                break;
+              }
+            }
+          }
+          scheduleSave();
+          renderChecklist();
+        });
+
+        const span = document.createElement('span');
+        span.className = 'item-text';
+        span.textContent = item.text;
+
+        const del = document.createElement('button');
+        del.className = 'delete-btn';
+        del.textContent = '\u00d7';
+        del.addEventListener('click', () => {
+          state.checklist[cat].splice(i, 1);
+          scheduleSave();
+          renderChecklist();
+        });
+
+        div.appendChild(cb);
+        div.appendChild(span);
+        div.appendChild(del);
+        container.appendChild(div);
+      });
+
+      const inputRow = document.createElement('div');
+      inputRow.className = 'inline-input';
+
+      const bullet = document.createElement('div');
+      bullet.className = 'bullet';
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.placeholder = 'Type a task and press Enter...';
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          const text = input.value.trim();
+          if (!text) return;
+          if (!state.checklist[cat]) state.checklist[cat] = [];
+          state.checklist[cat].push({ text, done: false });
+          scheduleSave();
+          renderChecklist();
+          setTimeout(() => {
+            const newInput = container.querySelector('.inline-input input');
+            if (newInput) newInput.focus();
+          }, 0);
+        }
+      });
+
+      inputRow.appendChild(bullet);
+      inputRow.appendChild(input);
+      container.appendChild(inputRow);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    // --- Chart mode toggle ---
+    document.getElementById('chart-daily').addEventListener('click', () => {
+      if (chartMode === 'daily') return;
+      chartMode = 'daily';
+      document.getElementById('chart-daily').classList.add('active');
+      document.getElementById('chart-cumulative').classList.remove('active');
+      renderChart(state.completionLog || []);
+    });
+    document.getElementById('chart-cumulative').addEventListener('click', () => {
+      if (chartMode === 'cumulative') return;
+      chartMode = 'cumulative';
+      document.getElementById('chart-cumulative').classList.add('active');
+      document.getElementById('chart-daily').classList.remove('active');
+      renderChart(state.completionLog || []);
+    });
+
+    // --- Dashboard ---
+    function renderDashboard() {
+      const log = state.completionLog || [];
+      const proItems = state.checklist.professional || [];
+      const perItems = state.checklist.personal || [];
+
+      const totalCompleted = log.length;
+      const pendingPro = proItems.filter(i => !i.done).length;
+      const pendingPer = perItems.filter(i => !i.done).length;
+      const proDone = log.filter(e => e.category === 'professional').length;
+      const perDone = log.filter(e => e.category === 'personal').length;
+
+      document.getElementById('stat-total').textContent = totalCompleted;
+      document.getElementById('stat-pending').textContent = pendingPro + pendingPer;
+      document.getElementById('stat-pro').textContent = proDone;
+      document.getElementById('stat-per').textContent = perDone;
+
+      renderChart(log);
+    }
+
+    function renderChart(log) {
+      const canvas = document.getElementById('chart');
+      const ctx = canvas.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.parentElement.getBoundingClientRect();
+      const w = rect.width - 28;
+      const h = 180;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      canvas.style.width = w + 'px';
+      canvas.style.height = h + 'px';
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, w, h);
+
+      // Build daily counts for last 14 days
+      const days = [];
+      const today = new Date();
+      for (let i = 13; i >= 0; i--) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - i);
+        days.push(d.toISOString().slice(0, 10));
+      }
+
+      const proCounts = {};
+      const perCounts = {};
+      days.forEach(d => { proCounts[d] = 0; perCounts[d] = 0; });
+      log.forEach(entry => {
+        if (proCounts[entry.date] !== undefined && entry.category === 'professional') proCounts[entry.date]++;
+        if (perCounts[entry.date] !== undefined && entry.category === 'personal') perCounts[entry.date]++;
+      });
+
+      // For cumulative mode, also count all completions before the 14-day window
+      let proRunning = 0;
+      let perRunning = 0;
+      if (chartMode === 'cumulative') {
+        const firstDay = days[0];
+        log.forEach(entry => {
+          if (entry.date < firstDay) {
+            if (entry.category === 'professional') proRunning++;
+            else if (entry.category === 'personal') perRunning++;
+          }
+        });
+      }
+
+      // Build display values
+      const proDisplay = [];
+      const perDisplay = [];
+      if (chartMode === 'cumulative') {
+        days.forEach(d => {
+          proRunning += proCounts[d];
+          perRunning += perCounts[d];
+          proDisplay.push(proRunning);
+          perDisplay.push(perRunning);
+        });
+      } else {
+        days.forEach(d => {
+          proDisplay.push(proCounts[d]);
+          perDisplay.push(perCounts[d]);
+        });
+      }
+
+      const maxVal = Math.max(1, ...proDisplay.map((v, i) => v + perDisplay[i]));
+      const chartH = h - 30;
+      const originX = 30;
+      const originY = h - 20;
+
+      // Grid lines
+      ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+      ctx.lineWidth = 0.5;
+      for (let i = 0; i <= 4; i++) {
+        const y = originY - (chartH / 4) * i;
+        ctx.beginPath();
+        ctx.moveTo(originX, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+      }
+
+      // Y-axis labels
+      ctx.fillStyle = '#5a5c74';
+      ctx.font = '10px Segoe UI, system-ui, sans-serif';
+      ctx.textAlign = 'right';
+      for (let i = 0; i <= 4; i++) {
+        const val = Math.round((maxVal / 4) * i);
+        const y = originY - (chartH / 4) * i;
+        ctx.fillText(val, originX - 4, y + 3);
+      }
+
+      if (chartMode === 'cumulative') {
+        // Line chart for cumulative
+        const barAreaW = w - 40;
+        const step = barAreaW / (days.length - 1);
+
+        // Total fill (area under curve)
+        ctx.beginPath();
+        ctx.moveTo(originX, originY);
+        days.forEach((d, i) => {
+          const x = originX + step * i;
+          const totalVal = proDisplay[i] + perDisplay[i];
+          const y = originY - (totalVal / maxVal) * chartH;
+          if (i === 0) ctx.lineTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.lineTo(originX + step * (days.length - 1), originY);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(180, 142, 255, 0.06)';
+        ctx.fill();
+
+        // Professional line
+        ctx.beginPath();
+        ctx.strokeStyle = '#5b9cf5';
+        ctx.lineWidth = 2;
+        ctx.lineJoin = 'round';
+        days.forEach((d, i) => {
+          const x = originX + step * i;
+          const y = originY - (proDisplay[i] / maxVal) * chartH;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        // Personal line
+        ctx.beginPath();
+        ctx.strokeStyle = '#6dd4a0';
+        ctx.lineWidth = 2;
+        ctx.lineJoin = 'round';
+        days.forEach((d, i) => {
+          const x = originX + step * i;
+          const y = originY - (perDisplay[i] / maxVal) * chartH;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        // Dots on lines
+        days.forEach((d, i) => {
+          const x = originX + step * i;
+          // Pro dot
+          const yPro = originY - (proDisplay[i] / maxVal) * chartH;
+          ctx.fillStyle = '#5b9cf5';
+          ctx.beginPath();
+          ctx.arc(x, yPro, 3, 0, Math.PI * 2);
+          ctx.fill();
+          // Per dot
+          const yPer = originY - (perDisplay[i] / maxVal) * chartH;
+          ctx.fillStyle = '#6dd4a0';
+          ctx.beginPath();
+          ctx.arc(x, yPer, 3, 0, Math.PI * 2);
+          ctx.fill();
+        });
+
+        // Date labels
+        days.forEach((d, i) => {
+          if (i % 2 === 0 || days.length <= 7) {
+            const x = originX + step * i;
+            ctx.fillStyle = '#5a5c74';
+            ctx.font = '9px Segoe UI, system-ui, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(d.slice(5), x, originY + 12);
+          }
+        });
+
+      } else {
+        // Bar chart for daily
+        const barAreaW = w - 40;
+        const barW = Math.max(4, (barAreaW / days.length) - 6);
+
+        days.forEach((d, i) => {
+          const x = originX + (barAreaW / days.length) * i + 3;
+          const proH = (proDisplay[i] / maxVal) * chartH;
+          const perH = (perDisplay[i] / maxVal) * chartH;
+          const totalH = proH + perH;
+
+          if (proH > 0) {
+            ctx.fillStyle = '#5b9cf5';
+            ctx.beginPath();
+            ctx.roundRect(x, originY - totalH, barW, proH, [3, 3, 0, 0]);
+            ctx.fill();
+          }
+
+          if (perH > 0) {
+            ctx.fillStyle = '#6dd4a0';
+            ctx.beginPath();
+            ctx.roundRect(x, originY - perH, barW, perH, [3, 3, 0, 0]);
+            ctx.fill();
+          }
+
+          if (proH === 0 && perH === 0) {
+            ctx.fillStyle = 'rgba(255,255,255,0.03)';
+            ctx.beginPath();
+            ctx.roundRect(x, originY - 3, barW, 3, [2, 2, 0, 0]);
+            ctx.fill();
+          }
+
+          if (i % 2 === 0 || days.length <= 7) {
+            ctx.fillStyle = '#5a5c74';
+            ctx.font = '9px Segoe UI, system-ui, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(d.slice(5), x + barW / 2, originY + 12);
+          }
+        });
+      }
+    }
+
+    // --- Window controls ---
+    document.getElementById('btn-min').addEventListener('click', () => window.api.minimize());
+    document.getElementById('btn-close').addEventListener('click', () => window.api.close());
+
+    // --- Init ---
+    showQuote(false);
+    load();
+    setInterval(() => showQuote(true), 60000);
+  </script>
+</body>
+</html>

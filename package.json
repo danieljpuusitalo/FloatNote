@@ -1,0 +1,16 @@
+{
+  "name": "floatnote",
+  "version": "1.0.0",
+  "description": "Floating notepad with checklist",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "electron": "^40.4.1"
+  }
+}
