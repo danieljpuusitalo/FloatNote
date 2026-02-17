@@ -72,11 +72,7 @@ If it starts to feel like a full note-taking platform, something has gone wrong.
 
 ## 🛣 Roadmap
 
-* [ ] Keyboard shortcut toggle
-* [ ] Dark / light mode
-* [ ] Draggable positioning
-* [ ] Optional markdown support
-* [ ] Optional sync
+[] Haha, let's see
 
 ---
 
