@@ -271,6 +271,45 @@
     .checklist-item:hover .delete-btn { opacity: 1; }
     .checklist-item .delete-btn:hover { color: var(--red); }
 
+    /* Priority border accent */
+    .checklist-item.priority-high { border-left-color: var(--red) !important; }
+    .checklist-item.priority-medium { border-left-color: var(--yellow) !important; }
+    .checklist-item.priority-low { border-left-color: var(--blue) !important; }
+
+    /* Priority flag button */
+    .priority-btn {
+      background: none; border: none; cursor: pointer;
+      font-size: 12px; padding: 0 2px; flex-shrink: 0;
+      color: var(--text-muted); opacity: 0.2; transition: opacity 0.15s, color 0.15s;
+      line-height: 1; font-family: inherit;
+    }
+    .checklist-item:hover .priority-btn { opacity: 0.6; }
+    .priority-btn.p-high { color: var(--red); opacity: 1 !important; }
+    .priority-btn.p-medium { color: var(--yellow); opacity: 1 !important; }
+    .priority-btn.p-low { color: var(--blue); opacity: 1 !important; }
+
+    /* Date badge (shown on hover) */
+    .item-date-badge {
+      font-size: 9.5px; color: var(--text-muted); opacity: 0;
+      transition: opacity 0.15s; white-space: nowrap; flex-shrink: 0;
+      letter-spacing: 0.2px;
+    }
+    .checklist-item:hover .item-date-badge { opacity: 0.65; }
+
+    /* Clean list toolbar */
+    .checklist-toolbar {
+      display: flex; justify-content: flex-end; padding: 4px 14px 0; flex-shrink: 0;
+    }
+    .clean-btn {
+      padding: 3px 10px; font-size: 10px; font-weight: 600; letter-spacing: 0.3px;
+      border: 1px solid var(--border-light); border-radius: 6px; background: transparent;
+      color: var(--text-muted); cursor: pointer; transition: all 0.15s; font-family: inherit;
+    }
+    .clean-btn:hover {
+      color: var(--red); border-color: rgba(240, 98, 146, 0.4);
+      background: rgba(240, 98, 146, 0.08);
+    }
+
     /* Dashboard */
     .dashboard { flex: 1; overflow-y: auto; padding: 14px; }
 
@@ -533,6 +572,9 @@
       <button class="cat-btn active-pro" data-cat="professional" id="cl-cat-pro">Professional</button>
       <button class="cat-btn" data-cat="personal" id="cl-cat-per">Personal</button>
     </div>
+    <div class="checklist-toolbar">
+      <button class="clean-btn" id="clean-btn">Clean list</button>
+    </div>
     <div class="checklist-items" id="checklist-items"></div>
   </div>
 
@@ -704,6 +746,14 @@
     document.getElementById('cl-cat-per').addEventListener('click', () => setChecklistCategory('personal'));
 
     // --- Checklist ---
+    const PRIORITY_CYCLE = ['none', 'high', 'medium', 'low'];
+
+    function formatAddedDate(dateStr) {
+      if (!dateStr) return 'Date unknown';
+      const d = new Date(dateStr + 'T00:00:00');
+      return 'Added ' + d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
     function renderChecklist() {
       const cat = activeChecklistCategory;
       const items = state.checklist[cat] || [];
@@ -711,8 +761,9 @@
       container.innerHTML = '';
 
       items.forEach((item, i) => {
+        const priority = item.priority || 'none';
         const div = document.createElement('div');
-        div.className = 'checklist-item' + (item.done ? ' checked' : '');
+        div.className = 'checklist-item' + (item.done ? ' checked' : '') + (priority !== 'none' ? ' priority-' + priority : '');
 
         const cb = document.createElement('input');
         cb.type = 'checkbox';
@@ -738,6 +789,22 @@
         span.className = 'item-text';
         span.textContent = item.text;
 
+        const dateBadge = document.createElement('span');
+        dateBadge.className = 'item-date-badge';
+        dateBadge.textContent = formatAddedDate(item.addedAt);
+
+        const priorityBtn = document.createElement('button');
+        priorityBtn.className = 'priority-btn' + (priority !== 'none' ? ' p-' + priority : '');
+        priorityBtn.textContent = '\u2691';
+        const priorityLabels = { none: 'Set priority', high: 'High priority', medium: 'Medium priority', low: 'Low priority' };
+        priorityBtn.title = priorityLabels[priority];
+        priorityBtn.addEventListener('click', () => {
+          const cur = state.checklist[cat][i].priority || 'none';
+          state.checklist[cat][i].priority = PRIORITY_CYCLE[(PRIORITY_CYCLE.indexOf(cur) + 1) % PRIORITY_CYCLE.length];
+          scheduleSave();
+          renderChecklist();
+        });
+
         const del = document.createElement('button');
         del.className = 'delete-btn';
         del.textContent = '\u00d7';
@@ -749,6 +816,8 @@
 
         div.appendChild(cb);
         div.appendChild(span);
+        div.appendChild(dateBadge);
+        div.appendChild(priorityBtn);
         div.appendChild(del);
         container.appendChild(div);
       });
@@ -767,7 +836,7 @@
           const text = input.value.trim();
           if (!text) return;
           if (!state.checklist[cat]) state.checklist[cat] = [];
-          state.checklist[cat].push({ text, done: false });
+          state.checklist[cat].push({ text, done: false, priority: 'none', addedAt: todayStr() });
           scheduleSave();
           renderChecklist();
           setTimeout(() => {
@@ -782,6 +851,18 @@
       container.appendChild(inputRow);
       container.scrollTop = container.scrollHeight;
     }
+
+    // --- Clean list ---
+    function cleanChecklist() {
+      const cat = activeChecklistCategory;
+      const before = (state.checklist[cat] || []).length;
+      state.checklist[cat] = (state.checklist[cat] || []).filter(item => !item.done);
+      if (state.checklist[cat].length < before) {
+        scheduleSave();
+        renderChecklist();
+      }
+    }
+    document.getElementById('clean-btn').addEventListener('click', cleanChecklist);
 
     // --- Chart mode toggle ---
     document.getElementById('chart-daily').addEventListener('click', () => {
