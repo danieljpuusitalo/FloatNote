@@ -242,6 +242,7 @@
     .checklist-item {
       display: flex; align-items: center; gap: 10px; padding: 9px 8px;
       border-radius: 8px; transition: background 0.15s; border: 1px solid transparent;
+      position: relative;
     }
     .checklist-item:hover {
       background: var(--bg-card-hover); border-color: var(--border);
@@ -298,7 +299,8 @@
 
     /* Clean list toolbar */
     .checklist-toolbar {
-      display: flex; justify-content: flex-end; padding: 4px 14px 0; flex-shrink: 0;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 4px 14px 0; flex-shrink: 0;
     }
     .clean-btn {
       padding: 3px 10px; font-size: 10px; font-weight: 600; letter-spacing: 0.3px;
@@ -308,6 +310,40 @@
     .clean-btn:hover {
       color: var(--red); border-color: rgba(240, 98, 146, 0.4);
       background: rgba(240, 98, 146, 0.08);
+    }
+
+    /* Sort select */
+    .sort-select {
+      padding: 3px 8px; font-size: 10px; font-weight: 600; letter-spacing: 0.3px;
+      border: 1px solid var(--border-light); border-radius: 6px;
+      background: transparent; color: var(--text-muted); cursor: pointer;
+      transition: all 0.15s; font-family: inherit; outline: none;
+      appearance: none; -webkit-appearance: none;
+    }
+    .sort-select:hover { color: var(--text-secondary); }
+    .sort-select option { background: var(--bg-surface); color: var(--text-primary); }
+
+    /* Deadline button */
+    .deadline-btn {
+      background: none; border: none; cursor: pointer;
+      font-size: 11px; padding: 0 2px; flex-shrink: 0;
+      opacity: 0; transition: opacity 0.15s; line-height: 1; font-family: inherit;
+      color: var(--text-muted);
+    }
+    .checklist-item:hover .deadline-btn { opacity: 0.5; }
+    .deadline-btn.has-deadline { opacity: 1 !important; color: var(--yellow); }
+    .deadline-btn.overdue { opacity: 1 !important; color: var(--red); }
+
+    /* Deadline badge */
+    .deadline-badge {
+      font-size: 9.5px; white-space: nowrap; flex-shrink: 0; letter-spacing: 0.2px;
+      padding: 1px 5px; border-radius: 4px;
+      background: rgba(255, 209, 128, 0.1); color: var(--yellow);
+      border: 1px solid rgba(255, 209, 128, 0.2);
+    }
+    .deadline-badge.overdue {
+      background: rgba(240, 98, 146, 0.1); color: var(--red);
+      border-color: rgba(240, 98, 146, 0.25);
     }
 
     /* Dashboard */
@@ -573,6 +609,11 @@
       <button class="cat-btn" data-cat="personal" id="cl-cat-per">Personal</button>
     </div>
     <div class="checklist-toolbar">
+      <select class="sort-select" id="sort-select">
+        <option value="none">&#x21F5; Sort</option>
+        <option value="date">Date added</option>
+        <option value="priority">Priority</option>
+      </select>
       <button class="clean-btn" id="clean-btn">Clean list</button>
     </div>
     <div class="checklist-items" id="checklist-items"></div>
@@ -617,6 +658,28 @@
       { text: "Sometimes even to live is an act of courage.", author: "Seneca" },
       { text: "There is only one way to happiness and that is to cease worrying about things which are beyond the power of our will.", author: "Epictetus" },
       { text: "The object of life is not to be on the side of the majority, but to escape finding oneself in the ranks of the insane.", author: "Marcus Aurelius" },
+      // Nietzsche
+      { text: "Without music, life would be a mistake.", author: "Nietzsche" },
+      { text: "That which does not kill us makes us stronger.", author: "Nietzsche" },
+      { text: "He who has a why to live can bear almost any how.", author: "Nietzsche" },
+      { text: "One must still have chaos in oneself to be able to give birth to a dancing star.", author: "Nietzsche" },
+      { text: "The higher we soar, the smaller we appear to those who cannot fly.", author: "Nietzsche" },
+      { text: "Become who you are.", author: "Nietzsche" },
+      { text: "The secret for harvesting from existence the greatest fruitfulness and the greatest enjoyment is to live dangerously.", author: "Nietzsche" },
+      // Kierkegaard
+      { text: "Life can only be understood backwards; but it must be lived forwards.", author: "Kierkegaard" },
+      { text: "The most common form of despair is not being who you are.", author: "Kierkegaard" },
+      { text: "Anxiety is the dizziness of freedom.", author: "Kierkegaard" },
+      { text: "To dare is to lose one's footing momentarily. Not to dare is to lose oneself.", author: "Kierkegaard" },
+      { text: "Once you label me you negate me.", author: "Kierkegaard" },
+      { text: "The highest and most beautiful things in life are not to be heard about, nor read about, nor seen, but, if one will, are to be lived.", author: "Kierkegaard" },
+      // Sartre
+      { text: "We are condemned to be free.", author: "Sartre" },
+      { text: "Man is nothing else but what he makes of himself.", author: "Sartre" },
+      { text: "Freedom is what you do with what has been done to you.", author: "Sartre" },
+      { text: "Everything has been figured out, except how to live.", author: "Sartre" },
+      { text: "Existence precedes essence.", author: "Sartre" },
+      { text: "Words are loaded pistols.", author: "Sartre" },
     ];
 
     let currentQuoteIndex = -1;
@@ -680,6 +743,7 @@
     let activeNotesCategory = 'professional';
     let activeChecklistCategory = 'professional';
     let chartMode = 'daily'; // 'daily' or 'cumulative'
+    let checklistSort = 'none'; // 'none' | 'date' | 'priority'
 
     // --- Persistence ---
     async function load() {
@@ -748,6 +812,33 @@
     // --- Checklist ---
     const PRIORITY_CYCLE = ['none', 'high', 'medium', 'low'];
 
+    function getSortedItems(items) {
+      const indexed = items.map((item, i) => ({ item, originalIndex: i }));
+      if (checklistSort === 'date') {
+        indexed.sort((a, b) => {
+          if (!a.item.addedAt && !b.item.addedAt) return 0;
+          if (!a.item.addedAt) return 1;
+          if (!b.item.addedAt) return -1;
+          return a.item.addedAt.localeCompare(b.item.addedAt);
+        });
+      } else if (checklistSort === 'priority') {
+        const order = { high: 0, medium: 1, low: 2, none: 3 };
+        indexed.sort((a, b) => order[a.item.priority || 'none'] - order[b.item.priority || 'none']);
+      }
+      return indexed;
+    }
+
+    function formatDeadline(dateStr) {
+      if (!dateStr) return '';
+      const d = new Date(dateStr + 'T00:00:00');
+      return 'Due ' + d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+
+    function isOverdue(dateStr) {
+      if (!dateStr) return false;
+      return dateStr < todayStr();
+    }
+
     function formatAddedDate(dateStr) {
       if (!dateStr) return 'Date unknown';
       const d = new Date(dateStr + 'T00:00:00');
@@ -760,7 +851,7 @@
       const container = document.getElementById('checklist-items');
       container.innerHTML = '';
 
-      items.forEach((item, i) => {
+      getSortedItems(items).forEach(({ item, originalIndex: i }) => {
         const priority = item.priority || 'none';
         const div = document.createElement('div');
         div.className = 'checklist-item' + (item.done ? ' checked' : '') + (priority !== 'none' ? ' priority-' + priority : '');
@@ -793,6 +884,31 @@
         dateBadge.className = 'item-date-badge';
         dateBadge.textContent = formatAddedDate(item.addedAt);
 
+        // Deadline: hidden date input + calendar button
+        const deadlineInput = document.createElement('input');
+        deadlineInput.type = 'date';
+        deadlineInput.style.cssText = 'position:fixed;top:-200px;left:-200px;opacity:0;width:0;height:0;border:0;padding:0;';
+        if (item.deadline) deadlineInput.value = item.deadline;
+        deadlineInput.addEventListener('change', () => {
+          const val = deadlineInput.value || undefined;
+          if (val) state.checklist[cat][i].deadline = val;
+          else delete state.checklist[cat][i].deadline;
+          scheduleSave();
+          renderChecklist();
+        });
+
+        const dlOverdue = item.deadline && isOverdue(item.deadline);
+        const deadlineBtn = document.createElement('button');
+        deadlineBtn.className = 'deadline-btn' + (item.deadline ? (dlOverdue ? ' overdue' : ' has-deadline') : '');
+        deadlineBtn.textContent = '\uD83D\uDCC5';
+        deadlineBtn.title = item.deadline ? 'Change deadline' : 'Set deadline';
+        deadlineBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          document.body.appendChild(deadlineInput);
+          if (deadlineInput.showPicker) deadlineInput.showPicker();
+          else deadlineInput.click();
+        });
+
         const priorityBtn = document.createElement('button');
         priorityBtn.className = 'priority-btn' + (priority !== 'none' ? ' p-' + priority : '');
         priorityBtn.textContent = '\u2691';
@@ -816,7 +932,14 @@
 
         div.appendChild(cb);
         div.appendChild(span);
+        if (item.deadline) {
+          const dlBadge = document.createElement('span');
+          dlBadge.className = 'deadline-badge' + (dlOverdue ? ' overdue' : '');
+          dlBadge.textContent = formatDeadline(item.deadline);
+          div.appendChild(dlBadge);
+        }
         div.appendChild(dateBadge);
+        div.appendChild(deadlineBtn);
         div.appendChild(priorityBtn);
         div.appendChild(del);
         container.appendChild(div);
@@ -863,6 +986,11 @@
       }
     }
     document.getElementById('clean-btn').addEventListener('click', cleanChecklist);
+
+    document.getElementById('sort-select').addEventListener('change', (e) => {
+      checklistSort = e.target.value;
+      renderChecklist();
+    });
 
     // --- Chart mode toggle ---
     document.getElementById('chart-daily').addEventListener('click', () => {
