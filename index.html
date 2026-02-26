@@ -216,9 +216,116 @@
     .notes-editor {
       flex: 1; background: transparent; color: var(--text-primary); border: none; padding: 16px;
       font-family: 'Segoe UI', system-ui, sans-serif; font-size: 13.5px; line-height: 1.7;
-      resize: none; outline: none; letter-spacing: 0.2px;
+      outline: none; letter-spacing: 0.2px; overflow-y: auto;
+      word-wrap: break-word;
     }
-    .notes-editor::placeholder { color: var(--text-muted); font-style: italic; }
+    .notes-editor:empty::before {
+      content: 'Start typing... (Ctrl+B bold, Ctrl+I italic, Ctrl+L bullet, # heading)';
+      color: var(--text-muted); font-style: italic; pointer-events: none;
+    }
+    .notes-editor .note-heading {
+      display: block; font-size: 15.5px; font-weight: 700; color: var(--accent);
+      border-bottom: 1px solid rgba(180, 142, 255, 0.2); padding-bottom: 4px;
+      margin: 12px 0 6px 0; letter-spacing: 0.4px; position: relative;
+    }
+    .notes-editor .note-heading:first-child { margin-top: 0; }
+    .notes-editor .note-heading .section-delete {
+      position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; color: var(--text-muted); cursor: pointer;
+      font-size: 14px; line-height: 1; padding: 2px 5px; border-radius: 3px;
+      opacity: 0; transition: opacity 0.15s, color 0.15s;
+    }
+    .notes-editor .note-heading:hover .section-delete { opacity: 1; }
+    .notes-editor .note-heading .section-delete:hover { color: var(--red); }
+    .notes-editor .note-bullet {
+      display: block; padding-left: 28px; min-height: 1.7em; position: relative;
+    }
+    .notes-editor .note-bullet::before {
+      content: '\2022'; position: absolute; left: 10px; color: var(--text-secondary); font-size: 15px;
+    }
+
+    /* Inline formatting inside editor */
+    .notes-editor b, .notes-editor strong { font-weight: 700; }
+    .notes-editor i, .notes-editor em { font-style: italic; }
+    .notes-editor u { text-decoration: underline; text-underline-offset: 2px; }
+    .notes-editor s, .notes-editor strike { text-decoration: line-through; color: var(--text-muted); }
+
+    /* Title heading (# ) */
+    .notes-editor .note-title {
+      display: block; font-size: 20px; font-weight: 700; color: var(--text-primary);
+      margin: 12px 0 6px 0; letter-spacing: 0.3px; position: relative;
+    }
+    .notes-editor .note-title:first-child { margin-top: 0; }
+    .notes-editor .note-title .section-delete {
+      position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; color: var(--text-muted); cursor: pointer;
+      font-size: 14px; line-height: 1; padding: 2px 5px; border-radius: 3px;
+      opacity: 0; transition: opacity 0.15s, color 0.15s;
+    }
+    .notes-editor .note-title:hover .section-delete { opacity: 1; }
+    .notes-editor .note-title .section-delete:hover { color: var(--red); }
+
+    /* Subheading (### ) */
+    .notes-editor .note-subheading {
+      display: block; font-size: 14px; font-weight: 600; color: var(--text-secondary);
+      margin: 10px 0 4px 0; letter-spacing: 0.3px; position: relative;
+    }
+    .notes-editor .note-subheading:first-child { margin-top: 0; }
+    .notes-editor .note-subheading .section-delete {
+      position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; color: var(--text-muted); cursor: pointer;
+      font-size: 14px; line-height: 1; padding: 2px 5px; border-radius: 3px;
+      opacity: 0; transition: opacity 0.15s, color 0.15s;
+    }
+    .notes-editor .note-subheading:hover .section-delete { opacity: 1; }
+    .notes-editor .note-subheading .section-delete:hover { color: var(--red); }
+
+    /* Numbered list */
+    .notes-editor .note-numbered {
+      display: block; padding-left: 28px; min-height: 1.7em; position: relative;
+    }
+    .notes-editor .note-numbered::before {
+      content: attr(data-num) '.'; position: absolute; left: 8px; color: var(--text-secondary);
+      font-size: 13px; font-weight: 600;
+    }
+
+    /* Checklist inside notes editor */
+    .notes-editor .note-checklist {
+      display: flex; align-items: flex-start; gap: 8px; min-height: 1.7em; padding: 1px 0;
+    }
+    .notes-editor .note-checklist .check-box {
+      appearance: none; -webkit-appearance: none;
+      width: 16px; height: 16px; border: 2px solid var(--text-muted);
+      border-radius: 4px; cursor: pointer; flex-shrink: 0;
+      margin-top: 3px; transition: all 0.15s; background: transparent;
+    }
+    .notes-editor .note-checklist .check-box:checked {
+      background: var(--accent); border-color: var(--accent);
+    }
+    .notes-editor .note-checklist .check-box:checked::after {
+      content: ''; position: absolute; left: 4px; top: 1px;
+      width: 5px; height: 9px; border: solid white; border-width: 0 2px 2px 0;
+      transform: rotate(45deg);
+    }
+    .notes-editor .note-checklist .check-box { position: relative; }
+    .notes-editor .note-checklist .check-text {
+      flex: 1; outline: none; min-width: 0;
+    }
+    .notes-editor .note-checklist.checked .check-text {
+      text-decoration: line-through; color: var(--text-muted);
+    }
+
+    /* Indent levels */
+    .notes-editor .indent-1 { margin-left: 28px; }
+    .notes-editor .indent-2 { margin-left: 56px; }
+    .notes-editor .indent-3 { margin-left: 84px; }
+
+    /* Inline code */
+    .notes-editor code {
+      font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+      background: rgba(180, 142, 255, 0.1); color: var(--accent);
+      padding: 1px 5px; border-radius: 4px; font-size: 12.5px;
+    }
 
     /* Checklist */
     .checklist-items { flex: 1; overflow-y: auto; padding: 8px 14px; }
@@ -599,7 +706,7 @@
       <button class="cat-btn active-pro" data-cat="professional" id="notes-cat-pro">Professional</button>
       <button class="cat-btn" data-cat="personal" id="notes-cat-per">Personal</button>
     </div>
-    <textarea class="notes-editor" id="notes-editor" placeholder="Start typing..."></textarea>
+    <div class="notes-editor" id="notes-editor" contenteditable="true"></div>
   </div>
 
   <!-- Checklist -->
@@ -745,6 +852,43 @@
     let chartMode = 'daily'; // 'daily' or 'cumulative'
     let checklistSort = 'none'; // 'none' | 'date' | 'priority'
 
+    // --- Custom undo/redo stack for DOM transformations ---
+    const undoStack = [];
+    const redoStack = [];
+    const MAX_UNDO = 100;
+
+    function pushUndo() {
+      const editor = document.getElementById('notes-editor');
+      if (!editor) return;
+      const html = editor.innerHTML;
+      if (undoStack.length && undoStack[undoStack.length - 1] === html) return; // no duplicate
+      undoStack.push(html);
+      if (undoStack.length > MAX_UNDO) undoStack.shift();
+      redoStack.length = 0; // clear redo on new action
+    }
+
+    function performUndo() {
+      const editor = document.getElementById('notes-editor');
+      if (!undoStack.length) return false;
+      redoStack.push(editor.innerHTML);
+      const prev = undoStack.pop();
+      editor.innerHTML = prev;
+      state.notes[activeNotesCategory] = prev;
+      scheduleSave();
+      return true;
+    }
+
+    function performRedo() {
+      const editor = document.getElementById('notes-editor');
+      if (!redoStack.length) return false;
+      undoStack.push(editor.innerHTML);
+      const next = redoStack.pop();
+      editor.innerHTML = next;
+      state.notes[activeNotesCategory] = next;
+      scheduleSave();
+      return true;
+    }
+
     // --- Persistence ---
     async function load() {
       const loaded = await window.api.loadData();
@@ -759,7 +903,15 @@
         document.getElementById('onboarding').classList.remove('hidden');
       }
 
-      document.getElementById('notes-editor').value = state.notes[activeNotesCategory] || '';
+      // Migrate plain text notes to HTML (wrap in <div> if no HTML tags present)
+      ['professional', 'personal'].forEach(cat => {
+        const n = state.notes[cat];
+        if (n && !/<[a-z][\s\S]*>/i.test(n)) {
+          state.notes[cat] = n.split('\n').map(l => '<div>' + (l || '<br>') + '</div>').join('');
+        }
+      });
+
+      document.getElementById('notes-editor').innerHTML = state.notes[activeNotesCategory] || '';
       renderChecklist();
       renderDashboard();
     }
@@ -789,14 +941,641 @@
       activeNotesCategory = cat;
       document.getElementById('notes-cat-pro').className = 'cat-btn' + (cat === 'professional' ? ' active-pro' : '');
       document.getElementById('notes-cat-per').className = 'cat-btn' + (cat === 'personal' ? ' active-per' : '');
-      document.getElementById('notes-editor').value = state.notes[cat] || '';
+      document.getElementById('notes-editor').innerHTML = state.notes[cat] || '';
+      // Reset undo/redo stacks on category switch
+      undoStack.length = 0;
+      redoStack.length = 0;
     }
     document.getElementById('notes-cat-pro').addEventListener('click', () => setNotesCategory('professional'));
     document.getElementById('notes-cat-per').addEventListener('click', () => setNotesCategory('personal'));
 
     document.getElementById('notes-editor').addEventListener('input', (e) => {
-      state.notes[activeNotesCategory] = e.target.value;
+      const editor = e.target;
+      const sel = window.getSelection();
+      if (sel.rangeCount) {
+        const node = sel.anchorNode;
+        if (node && node.nodeType === Node.TEXT_NODE) {
+          let block = node.parentElement;
+          while (block && block !== editor && block.parentElement !== editor) {
+            block = block.parentElement;
+          }
+          const isDirectText = (block === editor);
+          const container = isDirectText ? null : block;
+          const fullText = node.textContent || '';
+          const isSpecial = container && container.classList &&
+            (container.classList.contains('note-bullet') || container.classList.contains('note-heading') ||
+             container.classList.contains('note-title') || container.classList.contains('note-subheading') ||
+             container.classList.contains('note-numbered') || container.classList.contains('note-checklist'));
+
+          // Helper: replace node/container with a new element
+          function replaceWith(el) {
+            pushUndo();
+            if (container) { container.replaceWith(el); } else { node.remove(); editor.appendChild(el); }
+          }
+          function placeCursor(el, atEnd) {
+            const r = document.createRange();
+            if (atEnd && el.firstChild && el.firstChild.nodeType === Node.TEXT_NODE) {
+              r.setStart(el.firstChild, el.firstChild.textContent.length);
+            } else { r.setStart(el, 0); }
+            r.collapse(true); sel.removeAllRanges(); sel.addRange(r);
+          }
+
+          if (!isSpecial) {
+            // Auto-detect "- " → bullet
+            if (fullText.startsWith('- ') || fullText.startsWith('-\u00a0')) {
+              const rest = fullText.slice(2);
+              const bullet = document.createElement('div');
+              bullet.className = 'note-bullet';
+              bullet.textContent = rest || '';
+              if (!rest) bullet.innerHTML = '<br>';
+              replaceWith(bullet);
+              placeCursor(bullet, !!rest);
+            }
+            // Auto-detect "### " → subheading (check longest first)
+            else if (fullText.startsWith('### ') || fullText.startsWith('###\u00a0')) {
+              const rest = fullText.slice(4);
+              const el = document.createElement('div');
+              el.className = 'note-subheading';
+              el.textContent = rest || '';
+              if (!rest) el.innerHTML = '<br>';
+              const del = document.createElement('span');
+              del.className = 'section-delete'; del.textContent = '\u00d7';
+              del.setAttribute('contenteditable', 'false');
+              el.appendChild(del);
+              replaceWith(el);
+              placeCursor(el, !!rest);
+            }
+            // Auto-detect "## " → heading
+            else if (fullText.startsWith('## ') || fullText.startsWith('##\u00a0')) {
+              const rest = fullText.slice(3);
+              const el = document.createElement('div');
+              el.className = 'note-heading';
+              el.textContent = rest || '';
+              if (!rest) el.innerHTML = '<br>';
+              const del = document.createElement('span');
+              del.className = 'section-delete'; del.textContent = '\u00d7';
+              del.setAttribute('contenteditable', 'false');
+              el.appendChild(del);
+              replaceWith(el);
+              placeCursor(el, !!rest);
+            }
+            // Auto-detect "# " → title
+            else if (fullText.startsWith('# ') || fullText.startsWith('#\u00a0')) {
+              const rest = fullText.slice(2);
+              const el = document.createElement('div');
+              el.className = 'note-title';
+              el.textContent = rest || '';
+              if (!rest) el.innerHTML = '<br>';
+              const del = document.createElement('span');
+              del.className = 'section-delete'; del.textContent = '\u00d7';
+              del.setAttribute('contenteditable', 'false');
+              el.appendChild(del);
+              replaceWith(el);
+              placeCursor(el, !!rest);
+            }
+            // Auto-detect "1. " (digit + ". ") → numbered list
+            else if (/^\d+\.\s/.test(fullText) || /^\d+\.\u00a0/.test(fullText)) {
+              const match = fullText.match(/^(\d+)[.\u00a0]\s?/);
+              const rest = fullText.slice(match[0].length);
+              const el = document.createElement('div');
+              el.className = 'note-numbered';
+              el.setAttribute('data-num', match[1]);
+              el.textContent = rest || '';
+              if (!rest) el.innerHTML = '<br>';
+              replaceWith(el);
+              placeCursor(el, !!rest);
+            }
+            // Auto-detect "[] " or "[ ] " → checklist
+            else if (fullText.startsWith('[] ') || fullText.startsWith('[]\u00a0') ||
+                     fullText.startsWith('[ ] ') || fullText.startsWith('[ ]\u00a0')) {
+              const sliceLen = fullText.startsWith('[ ]') ? 4 : 3;
+              const rest = fullText.slice(sliceLen);
+              const cl = document.createElement('div');
+              cl.className = 'note-checklist';
+              const cb = document.createElement('input');
+              cb.type = 'checkbox'; cb.className = 'check-box';
+              cb.setAttribute('contenteditable', 'false');
+              const span = document.createElement('span');
+              span.className = 'check-text';
+              span.setAttribute('contenteditable', 'true');
+              span.textContent = rest || '';
+              if (!rest) span.innerHTML = '<br>';
+              cl.appendChild(cb); cl.appendChild(span);
+              replaceWith(cl);
+              const r = document.createRange();
+              if (rest) { r.setStart(span.firstChild, rest.length); }
+              else { r.setStart(span, 0); }
+              r.collapse(true); sel.removeAllRanges(); sel.addRange(r);
+            }
+          }
+
+          // Inline code: detect closing backtick pattern `text`
+          const backtickMatch = fullText.match(/`([^`]+)`$/);
+          if (backtickMatch) {
+            pushUndo();
+            const codeText = backtickMatch[1];
+            const matchStart = fullText.lastIndexOf('`' + codeText + '`');
+            // Split text node: before, code, after
+            const before = fullText.slice(0, matchStart);
+            const textNode = node;
+            const parent = textNode.parentNode;
+            // Clear the backtick pattern and insert code element
+            textNode.textContent = before;
+            const codeEl = document.createElement('code');
+            codeEl.textContent = codeText;
+            const afterNode = document.createTextNode('\u00a0');
+            if (textNode.nextSibling) {
+              parent.insertBefore(codeEl, textNode.nextSibling);
+              parent.insertBefore(afterNode, codeEl.nextSibling);
+            } else {
+              parent.appendChild(codeEl);
+              parent.appendChild(afterNode);
+            }
+            const r = document.createRange();
+            r.setStart(afterNode, 1);
+            r.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(r);
+          }
+        }
+      }
+      state.notes[activeNotesCategory] = editor.innerHTML;
       scheduleSave();
+    });
+
+    // --- Notes: keyboard handlers ---
+    document.getElementById('notes-editor').addEventListener('keydown', (e) => {
+      const editor = e.currentTarget;
+
+      // Ctrl+Z: undo (custom stack)
+      if (e.ctrlKey && !e.shiftKey && e.key === 'z') {
+        e.preventDefault();
+        performUndo();
+        return;
+      }
+
+      // Ctrl+Y or Ctrl+Shift+Z: redo
+      if ((e.ctrlKey && !e.shiftKey && e.key === 'y') || (e.ctrlKey && e.shiftKey && e.key === 'Z')) {
+        e.preventDefault();
+        performRedo();
+        return;
+      }
+
+      // Snapshot undo state before any custom transformation
+      // (skip for navigation keys, typing, and undo/redo itself)
+      const transformKeys = ['b','i','u','h','l','S','H','L','Tab','Backspace','Enter'];
+      if (e.ctrlKey || e.key === 'Tab' || e.key === 'Backspace' || e.key === 'Enter') {
+        const k = e.key;
+        if (transformKeys.includes(k) || (e.ctrlKey && transformKeys.includes(k.toLowerCase()))) {
+          pushUndo();
+        }
+      }
+
+      // Ctrl+B: toggle bold (inline formatting)
+      if (e.ctrlKey && !e.shiftKey && e.key === 'b') {
+        e.preventDefault();
+        document.execCommand('bold');
+        state.notes[activeNotesCategory] = editor.innerHTML;
+        scheduleSave();
+        return;
+      }
+
+      // Ctrl+I: toggle italic
+      if (e.ctrlKey && !e.shiftKey && e.key === 'i') {
+        e.preventDefault();
+        document.execCommand('italic');
+        state.notes[activeNotesCategory] = editor.innerHTML;
+        scheduleSave();
+        return;
+      }
+
+      // Ctrl+U: toggle underline
+      if (e.ctrlKey && !e.shiftKey && e.key === 'u') {
+        e.preventDefault();
+        document.execCommand('underline');
+        state.notes[activeNotesCategory] = editor.innerHTML;
+        scheduleSave();
+        return;
+      }
+
+      // Ctrl+Shift+S: toggle strikethrough
+      if (e.ctrlKey && e.shiftKey && e.key === 'S') {
+        e.preventDefault();
+        document.execCommand('strikeThrough');
+        state.notes[activeNotesCategory] = editor.innerHTML;
+        scheduleSave();
+        return;
+      }
+
+      // Ctrl+Shift+H: wrap selected text as section heading (old Ctrl+B)
+      if (e.ctrlKey && e.shiftKey && e.key === 'H') {
+        e.preventDefault();
+        const sel = window.getSelection();
+        if (!sel.rangeCount) return;
+        const range = sel.getRangeAt(0);
+        const selectedText = range.toString().trim();
+        if (!selectedText) return;
+
+        range.deleteContents();
+        const heading = document.createElement('div');
+        heading.className = 'note-heading';
+        heading.textContent = selectedText;
+        const del = document.createElement('span');
+        del.className = 'section-delete';
+        del.textContent = '\u00d7';
+        del.setAttribute('contenteditable', 'false');
+        heading.appendChild(del);
+        range.insertNode(heading);
+
+        const r = document.createRange();
+        r.setStartAfter(heading);
+        r.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(r);
+
+        state.notes[activeNotesCategory] = editor.innerHTML;
+        scheduleSave();
+        return;
+      }
+
+      // Ctrl+H: wrap selected text as heading (## equivalent)
+      if (e.ctrlKey && !e.shiftKey && e.key === 'h') {
+        e.preventDefault();
+        const sel = window.getSelection();
+        if (!sel.rangeCount) return;
+        const range = sel.getRangeAt(0);
+        const selectedText = range.toString().trim();
+        if (!selectedText) return;
+
+        range.deleteContents();
+        const heading = document.createElement('div');
+        heading.className = 'note-heading';
+        heading.textContent = selectedText;
+        const del = document.createElement('span');
+        del.className = 'section-delete';
+        del.textContent = '\u00d7';
+        del.setAttribute('contenteditable', 'false');
+        heading.appendChild(del);
+        range.insertNode(heading);
+
+        const r = document.createRange();
+        r.setStartAfter(heading);
+        r.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(r);
+
+        state.notes[activeNotesCategory] = editor.innerHTML;
+        scheduleSave();
+        return;
+      }
+
+      // Ctrl+Shift+L: toggle checklist on current line
+      if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+        e.preventDefault();
+        const sel = window.getSelection();
+        if (!sel.rangeCount) return;
+        const node = sel.anchorNode;
+        let block = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+        while (block && block !== editor && block.parentElement !== editor) {
+          block = block.parentElement;
+        }
+        // If inside a check-text span, go up to note-checklist
+        if (block && block.classList && block.classList.contains('check-text')) {
+          block = block.parentElement;
+        }
+
+        if (block && block.classList && block.classList.contains('note-checklist')) {
+          // Unwrap checklist to plain div
+          const textSpan = block.querySelector('.check-text');
+          const plain = document.createElement('div');
+          plain.textContent = (textSpan ? textSpan.textContent : block.textContent) || '';
+          if (!plain.textContent) plain.innerHTML = '<br>';
+          block.replaceWith(plain);
+          const r = document.createRange();
+          r.selectNodeContents(plain);
+          r.collapse(false);
+          sel.removeAllRanges();
+          sel.addRange(r);
+        } else if (block && block !== editor && block.tagName === 'DIV') {
+          // Convert to checklist
+          const text = block.textContent || '';
+          const cl = document.createElement('div');
+          cl.className = 'note-checklist';
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.className = 'check-box';
+          cb.setAttribute('contenteditable', 'false');
+          const span = document.createElement('span');
+          span.className = 'check-text';
+          span.setAttribute('contenteditable', 'true');
+          span.textContent = text;
+          if (!text) span.innerHTML = '<br>';
+          cl.appendChild(cb);
+          cl.appendChild(span);
+          block.replaceWith(cl);
+          const r = document.createRange();
+          r.selectNodeContents(span);
+          r.collapse(false);
+          sel.removeAllRanges();
+          sel.addRange(r);
+        }
+        state.notes[activeNotesCategory] = editor.innerHTML;
+        scheduleSave();
+        return;
+      }
+
+      // Ctrl+L: toggle bullet on selected text / current line(s)
+      if (e.ctrlKey && e.key === 'l') {
+        e.preventDefault();
+        const sel = window.getSelection();
+        if (!sel.rangeCount) return;
+
+        // Helper: find direct-child block of editor for a given node
+        function findBlock(n) {
+          let b = n.nodeType === Node.TEXT_NODE ? n.parentElement : n;
+          while (b && b !== editor && b.parentElement !== editor) b = b.parentElement;
+          return (b && b !== editor) ? b : null;
+        }
+
+        // Collect all direct-child blocks in the selection range
+        const range = sel.getRangeAt(0);
+        const startBlock = findBlock(range.startContainer);
+        const endBlock = findBlock(range.endContainer);
+
+        const blocks = [];
+        if (startBlock) {
+          let cur = startBlock;
+          while (cur) {
+            if (cur.nodeType === Node.ELEMENT_NODE && cur.parentElement === editor) {
+              blocks.push(cur);
+            }
+            if (cur === endBlock) break;
+            cur = cur.nextElementSibling;
+          }
+        }
+
+        // If no blocks found, fall back to single-block from anchor
+        if (!blocks.length) {
+          const b = findBlock(sel.anchorNode);
+          if (b) blocks.push(b);
+        }
+
+        if (!blocks.length) return;
+
+        // Determine toggle direction: if ALL are bullets, unbullet; otherwise bullet all
+        const allBullets = blocks.every(b => b.classList && b.classList.contains('note-bullet'));
+        const headingTypes = ['note-heading', 'note-title', 'note-subheading'];
+
+        blocks.forEach(block => {
+          if (allBullets) {
+            // Unwrap bullet to plain div
+            const plain = document.createElement('div');
+            plain.textContent = block.textContent || '';
+            if (!plain.textContent) plain.innerHTML = '<br>';
+            block.replaceWith(plain);
+          } else if (!block.classList.contains('note-bullet')) {
+            // Convert to bullet (skip headings)
+            const isHeading = headingTypes.some(h => block.classList.contains(h));
+            if (!isHeading && block.tagName === 'DIV') {
+              block.className = 'note-bullet';
+            }
+          }
+        });
+
+        state.notes[activeNotesCategory] = editor.innerHTML;
+        scheduleSave();
+        return;
+      }
+
+      // Tab / Shift+Tab: indent/outdent list items
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const sel = window.getSelection();
+        if (!sel.rangeCount) return;
+        const node = sel.anchorNode;
+        let block = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+        while (block && block !== editor && block.parentElement !== editor) {
+          block = block.parentElement;
+        }
+        // Also check if inside check-text
+        if (block && block.classList && block.classList.contains('check-text')) {
+          block = block.parentElement;
+        }
+        if (block && block.classList && (block.classList.contains('note-bullet') ||
+            block.classList.contains('note-numbered') || block.classList.contains('note-checklist'))) {
+          const curLevel = parseInt(block.getAttribute('data-indent') || '0');
+          if (e.shiftKey) {
+            // Outdent
+            const newLevel = Math.max(0, curLevel - 1);
+            block.setAttribute('data-indent', newLevel);
+            block.classList.remove('indent-1', 'indent-2', 'indent-3');
+            if (newLevel > 0) block.classList.add('indent-' + newLevel);
+          } else {
+            // Indent
+            const newLevel = Math.min(3, curLevel + 1);
+            block.setAttribute('data-indent', newLevel);
+            block.classList.remove('indent-1', 'indent-2', 'indent-3');
+            block.classList.add('indent-' + newLevel);
+          }
+          state.notes[activeNotesCategory] = editor.innerHTML;
+          scheduleSave();
+        }
+        return;
+      }
+
+      // Backspace: unwrap headings/titles/subheadings back to plain text
+      if (e.key === 'Backspace') {
+        const sel = window.getSelection();
+        if (!sel.rangeCount) return;
+        let node = sel.anchorNode;
+        const hEl = node.nodeType === Node.TEXT_NODE
+          ? node.parentElement.closest('.note-heading, .note-title, .note-subheading')
+          : node.closest('.note-heading, .note-title, .note-subheading');
+        if (hEl && hEl.closest('.notes-editor') === editor) {
+          const hText = hEl.textContent.replace('\u00d7', '').trim();
+          if (!hText) {
+            e.preventDefault();
+            hEl.remove();
+            state.notes[activeNotesCategory] = editor.innerHTML;
+            scheduleSave();
+            return;
+          }
+          if (sel.anchorOffset === 0 && node === hEl.firstChild) {
+            e.preventDefault();
+            const plain = document.createElement('div');
+            plain.textContent = hText;
+            hEl.parentNode.replaceChild(plain, hEl);
+            const r = document.createRange();
+            r.setStart(plain.firstChild, 0);
+            r.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(r);
+            state.notes[activeNotesCategory] = editor.innerHTML;
+            scheduleSave();
+          }
+        }
+        return;
+      }
+
+      // Enter: auto-continue bullets, numbered lists, and checklists
+      if (e.key === 'Enter' && !e.shiftKey) {
+        const sel = window.getSelection();
+        if (!sel.rangeCount) return;
+        const node = sel.anchorNode;
+
+        // Helper: find closest list-type ancestor
+        let listItem = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+        while (listItem && listItem !== editor &&
+               !listItem.classList.contains('note-bullet') &&
+               !listItem.classList.contains('note-numbered') &&
+               !listItem.classList.contains('note-checklist')) {
+          listItem = listItem.parentElement;
+        }
+        if (!listItem || listItem === editor) return;
+
+        // --- Bullet ---
+        if (listItem.classList.contains('note-bullet')) {
+          e.preventDefault();
+          const text = listItem.textContent || '';
+          if (!text.trim()) {
+            const plain = document.createElement('div');
+            plain.innerHTML = '<br>';
+            listItem.replaceWith(plain);
+            const r = document.createRange();
+            r.setStart(plain, 0); r.collapse(true);
+            sel.removeAllRanges(); sel.addRange(r);
+          } else {
+            const nb = document.createElement('div');
+            nb.className = 'note-bullet';
+            nb.innerHTML = '<br>';
+            // Copy indent level
+            const indent = listItem.getAttribute('data-indent');
+            if (indent && indent !== '0') { nb.setAttribute('data-indent', indent); nb.classList.add('indent-' + indent); }
+            listItem.after(nb);
+            const r = document.createRange();
+            r.setStart(nb, 0); r.collapse(true);
+            sel.removeAllRanges(); sel.addRange(r);
+          }
+          state.notes[activeNotesCategory] = editor.innerHTML;
+          scheduleSave();
+          return;
+        }
+
+        // --- Numbered list ---
+        if (listItem.classList.contains('note-numbered')) {
+          e.preventDefault();
+          const text = listItem.textContent || '';
+          if (!text.trim()) {
+            const plain = document.createElement('div');
+            plain.innerHTML = '<br>';
+            listItem.replaceWith(plain);
+            const r = document.createRange();
+            r.setStart(plain, 0); r.collapse(true);
+            sel.removeAllRanges(); sel.addRange(r);
+          } else {
+            const curNum = parseInt(listItem.getAttribute('data-num') || '1');
+            const nn = document.createElement('div');
+            nn.className = 'note-numbered';
+            nn.setAttribute('data-num', curNum + 1);
+            nn.innerHTML = '<br>';
+            const indent = listItem.getAttribute('data-indent');
+            if (indent && indent !== '0') { nn.setAttribute('data-indent', indent); nn.classList.add('indent-' + indent); }
+            listItem.after(nn);
+            // Renumber subsequent siblings
+            let sib = nn.nextElementSibling;
+            let num = curNum + 2;
+            while (sib && sib.classList.contains('note-numbered')) {
+              sib.setAttribute('data-num', num);
+              num++;
+              sib = sib.nextElementSibling;
+            }
+            const r = document.createRange();
+            r.setStart(nn, 0); r.collapse(true);
+            sel.removeAllRanges(); sel.addRange(r);
+          }
+          state.notes[activeNotesCategory] = editor.innerHTML;
+          scheduleSave();
+          return;
+        }
+
+        // --- Checklist ---
+        if (listItem.classList.contains('note-checklist')) {
+          e.preventDefault();
+          const textSpan = listItem.querySelector('.check-text');
+          const text = textSpan ? textSpan.textContent : listItem.textContent;
+          if (!text || !text.trim()) {
+            const plain = document.createElement('div');
+            plain.innerHTML = '<br>';
+            listItem.replaceWith(plain);
+            const r = document.createRange();
+            r.setStart(plain, 0); r.collapse(true);
+            sel.removeAllRanges(); sel.addRange(r);
+          } else {
+            const cl = document.createElement('div');
+            cl.className = 'note-checklist';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox'; cb.className = 'check-box';
+            cb.setAttribute('contenteditable', 'false');
+            const span = document.createElement('span');
+            span.className = 'check-text';
+            span.setAttribute('contenteditable', 'true');
+            span.innerHTML = '<br>';
+            cl.appendChild(cb); cl.appendChild(span);
+            const indent = listItem.getAttribute('data-indent');
+            if (indent && indent !== '0') { cl.setAttribute('data-indent', indent); cl.classList.add('indent-' + indent); }
+            listItem.after(cl);
+            const r = document.createRange();
+            r.setStart(span, 0); r.collapse(true);
+            sel.removeAllRanges(); sel.addRange(r);
+          }
+          state.notes[activeNotesCategory] = editor.innerHTML;
+          scheduleSave();
+          return;
+        }
+      }
+    });
+
+    // --- Notes: paste handler (plain text by default) ---
+    document.getElementById('notes-editor').addEventListener('paste', (e) => {
+      // Ctrl+Shift+V: allow rich paste (don't prevent default)
+      if (e.ctrlKey && e.shiftKey) return;
+      // Default: paste as plain text
+      e.preventDefault();
+      const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+      document.execCommand('insertText', false, text);
+    });
+
+    // --- Notes: section delete + checkbox toggle via event delegation ---
+    document.getElementById('notes-editor').addEventListener('click', (e) => {
+      // Section delete button (×)
+      if (e.target.classList.contains('section-delete')) {
+        e.preventDefault();
+        e.stopPropagation();
+        const heading = e.target.closest('.note-heading, .note-title, .note-subheading');
+        if (heading) {
+          heading.remove();
+          const editor = document.getElementById('notes-editor');
+          state.notes[activeNotesCategory] = editor.innerHTML;
+          scheduleSave();
+        }
+      }
+    });
+
+    // --- Notes: checklist checkbox change ---
+    document.getElementById('notes-editor').addEventListener('change', (e) => {
+      if (e.target.classList.contains('check-box')) {
+        const cl = e.target.closest('.note-checklist');
+        if (cl) {
+          if (e.target.checked) {
+            cl.classList.add('checked');
+          } else {
+            cl.classList.remove('checked');
+          }
+          const editor = document.getElementById('notes-editor');
+          state.notes[activeNotesCategory] = editor.innerHTML;
+          scheduleSave();
+        }
+      }
     });
 
     // --- Checklist category toggle ---
