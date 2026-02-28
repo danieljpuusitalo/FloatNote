@@ -2,11 +2,28 @@
 
 A lightweight floating desktop notepad that stays out of your way — until you need it.
 
-FloatNote is a minimal scratchpad designed for fast thoughts, reminders, and fragments of ideas without breaking your flow. Built with Electron as a single-file app.
+FloatNote is a productivity scratchpad with notes, checklists, habit tracking, and a fully configurable dashboard — designed for fast thoughts and daily discipline without breaking your flow. Built with Electron as a single-file app.
 
 ---
 
 ## Features
+
+**Configurable Dashboard** (v1.3)
+- 20 widget options — 16 stat blocks + 4 full-width panels
+- Toggle widgets on/off via gear menu
+- Drag-and-drop reordering of any widget
+- Stats: completed/pending/priority counts, today's tasks, overdue, habit streaks, XP level, daily averages
+- Full-width: stoic quote card, productivity chart, 28-day habit heatmap, per-habit weekly bars
+- Layout persists across sessions
+
+**Habit Tracker** (v1.3)
+- Dedicated tab with Tracker and Input & Performance views
+- Weekly check-off grid with drag-and-drop slot reordering
+- Custom schedules — daily or specific days of the week
+- Streak tracking — per-habit and overall day streaks
+- XP & leveling — gamified progression based on completions
+- 28-day heatmap and per-habit weekly completion bars
+- Archive habits without losing history
 
 **Rich Text Editor** (v1.2)
 - **Inline formatting** — Bold (`Ctrl+B`), Italic (`Ctrl+I`), Underline (`Ctrl+U`), Strikethrough (`Ctrl+Shift+S`)
@@ -28,7 +45,8 @@ FloatNote is a minimal scratchpad designed for fast thoughts, reminders, and fra
 **Core**
 - Floating always-on-top window
 - Two categories: Professional and Personal (notes + checklist)
-- Dashboard with completion stats and productivity chart (daily/cumulative)
+- Elastic overscroll with smooth bounce effect on all scrollable panels
+- Custom themed scrollbars
 - Stoic & existentialist quote rotation (60+ quotes)
 - Onboarding with name and accent colour (purple, blue, green, pink, gold)
 - Persistent storage across sessions
@@ -80,6 +98,15 @@ npm run build
 ---
 
 ## Version History
+
+### v1.3 — Habit Tracker & Configurable Dashboard
+- Full habit tracking system with weekly grid, custom schedules, streaks, XP leveling, heatmap, and bar charts
+- Configurable dashboard with 20 toggleable widgets and drag-and-drop reordering
+- New stat widgets: priority counts, today/overdue tasks, habit metrics, XP, daily averages
+- New full-width widgets: 28-day habit heatmap, per-habit weekly completion bars
+- Elastic overscroll with smooth bounce on all scrollable panels
+- Custom themed scrollbars
+- Codebase cleanup: removed dead CSS/JS, optimised calculations
 
 ### v1.2 — Rich Text Editor
 - Apple Notes-style rich text editing with full inline formatting
