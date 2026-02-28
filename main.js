@@ -8,7 +8,9 @@ const DEFAULT_STATE = {
   notes: { professional: '', personal: '' },
   checklist: { professional: [], personal: [] },
   completionLog: [],
-  preferences: null
+  preferences: null,
+  habits: [],
+  habitLog: {}
 };
 
 function loadData() {
