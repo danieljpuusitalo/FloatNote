@@ -1,6 +1,6 @@
 {
   "name": "floatnote",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "Floating notepad with checklist, habit tracker, and configurable dashboard",
   "main": "main.js",
   "scripts": {
@@ -33,11 +33,13 @@
       "perMachine": false,
       "allowToChangeInstallationDirectory": false
     },
+    "icon": "build/icon.ico",
     "files": [
       "main.js",
       "preload.js",
       "index.html",
-      "package.json"
+      "package.json",
+      "build/**"
     ]
   },
   "devDependencies": {
