@@ -2000,10 +2000,15 @@
       return 'Added ' + d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     }
 
-    function renderChecklist() {
+    function getAllChecklistItems() {
+      return [...(state.checklist.professional || []), ...(state.checklist.personal || [])];
+    }
+
+    function renderChecklist(scrollToBottom) {
       const cat = activeChecklistCategory;
       const items = state.checklist[cat] || [];
       const container = document.getElementById('checklist-items');
+      document.querySelectorAll('input[data-checklist-picker]').forEach(el => el.remove());
       container.innerHTML = '';
 
       getSortedItems(items).forEach(({ item, originalIndex: i }) => {
@@ -2042,6 +2047,7 @@
         // Deadline: hidden date input + calendar button
         const deadlineInput = document.createElement('input');
         deadlineInput.type = 'date';
+        deadlineInput.dataset.checklistPicker = 'true';
         deadlineInput.style.cssText = 'position:fixed;top:-200px;left:-200px;opacity:0;width:0;height:0;border:0;padding:0;';
         if (item.deadline) deadlineInput.value = item.deadline;
         deadlineInput.addEventListener('change', () => {
@@ -2117,7 +2123,7 @@
           if (!state.checklist[cat]) state.checklist[cat] = [];
           state.checklist[cat].push({ text, done: false, priority: 'none', addedAt: todayStr() });
           scheduleSave();
-          renderChecklist();
+          renderChecklist(true);
           setTimeout(() => {
             const newInput = container.querySelector('.inline-input input');
             if (newInput) newInput.focus();
@@ -2128,7 +2134,7 @@
       inputRow.appendChild(bullet);
       inputRow.appendChild(input);
       container.appendChild(inputRow);
-      container.scrollTop = container.scrollHeight;
+      if (scrollToBottom) container.scrollTop = container.scrollHeight;
     }
 
     // --- Clean list ---
@@ -2148,8 +2154,9 @@
       renderChecklist();
     });
 
-    // Chart mode toggle (delegated, since chart is rendered dynamically)
+    // Delegated click handlers for dynamically rendered dashboard elements
     document.addEventListener('click', (e) => {
+      if (e.target.closest('#quote-card')) { showQuote(true); return; }
       if (e.target.id === 'chart-daily') {
         if (chartMode === 'daily') return;
         chartMode = 'daily';
@@ -2197,21 +2204,21 @@
       },
       { id: 'stat-high', label: 'High Priority', type: 'stat', icon: '\uD83D\uDD34',
         render: (el) => {
-          const all = [...(state.checklist.professional || []), ...(state.checklist.personal || [])];
+          const all = getAllChecklistItems();
           const v = all.filter(i => !i.done && i.priority === 'high').length;
           el.innerHTML = '<div class="stat-icon">\uD83D\uDD34</div><div class="stat-value" style="background:linear-gradient(135deg,var(--red),#f48fb1);-webkit-background-clip:text;-webkit-text-fill-color:transparent">' + v + '</div><div class="stat-label">High Priority</div>';
         }
       },
       { id: 'stat-medium', label: 'Medium Priority', type: 'stat', icon: '\uD83D\uDFE1',
         render: (el) => {
-          const all = [...(state.checklist.professional || []), ...(state.checklist.personal || [])];
+          const all = getAllChecklistItems();
           const v = all.filter(i => !i.done && i.priority === 'medium').length;
           el.innerHTML = '<div class="stat-icon">\uD83D\uDFE1</div><div class="stat-value yellow">' + v + '</div><div class="stat-label">Medium Priority</div>';
         }
       },
       { id: 'stat-low', label: 'Low Priority', type: 'stat', icon: '\uD83D\uDD35',
         render: (el) => {
-          const all = [...(state.checklist.professional || []), ...(state.checklist.personal || [])];
+          const all = getAllChecklistItems();
           const v = all.filter(i => !i.done && i.priority === 'low').length;
           el.innerHTML = '<div class="stat-icon">\uD83D\uDD35</div><div class="stat-value blue">' + v + '</div><div class="stat-label">Low Priority</div>';
         }
@@ -2226,7 +2233,7 @@
       { id: 'stat-overdue', label: 'Overdue Tasks', type: 'stat', icon: '\u23F0',
         render: (el) => {
           const today = todayStr();
-          const all = [...(state.checklist.professional || []), ...(state.checklist.personal || [])];
+          const all = getAllChecklistItems();
           const v = all.filter(i => !i.done && i.deadline && i.deadline < today).length;
           el.innerHTML = '<div class="stat-icon">\u23F0</div><div class="stat-value" style="background:linear-gradient(135deg,var(--red),#f48fb1);-webkit-background-clip:text;-webkit-text-fill-color:transparent">' + v + '</div><div class="stat-label">Overdue</div>';
         }
@@ -2302,7 +2309,6 @@
         render: (el) => {
           const q = getRandomQuote();
           el.innerHTML = '<div class="quote-card" id="quote-card" title="Click for a new quote"><div class="quote-text" id="quote-text">' + escapeHtml(q.text) + '</div><div class="quote-author" id="quote-author">\u2014 ' + escapeHtml(q.author) + '</div><div class="quote-hint">click for another</div></div>';
-          el.querySelector('#quote-card').addEventListener('click', () => showQuote(true));
         }
       },
       { id: 'chart-productivity', label: 'Productivity Chart', type: 'full', icon: '\uD83D\uDCCA',
@@ -2315,35 +2321,7 @@
         render: (el) => {
           const activeHabits = (state.habits || []).filter(h => !h.archived);
           if (!activeHabits.length) { el.innerHTML = '<div class="chart-container" style="text-align:center;padding:20px;color:var(--text-muted);font-size:12px">No active habits for heatmap</div>'; return; }
-          let html = '<div class="chart-container"><div class="chart-title" style="margin-bottom:8px">28-Day Heatmap</div>';
-          html += '<div style="display:flex;gap:2px;margin-bottom:4px">';
-          DAY_NAMES.forEach(n => { html += '<div class="habit-heatmap-label" style="flex:1">' + n.charAt(0) + '</div>'; });
-          html += '</div><div class="habit-heatmap">';
-          const heatDays = [];
-          const heatEnd = new Date();
-          const heatDow = heatEnd.getDay();
-          const heatMondayOff = heatDow === 0 ? -6 : 1 - heatDow;
-          const heatStart = new Date(heatEnd);
-          heatStart.setDate(heatEnd.getDate() + heatMondayOff - 21);
-          for (let i = 0; i < 28; i++) { const dd = new Date(heatStart); dd.setDate(heatStart.getDate() + i); heatDays.push(toDateStr(dd)); }
-          heatDays.forEach(dateStr => {
-            const dd = new Date(dateStr + 'T00:00:00');
-            const dow = dd.getDay();
-            const dayOfWeek = dow === 0 ? 6 : dow - 1;
-            let scheduled = 0, completed = 0;
-            activeHabits.forEach(h => {
-              if (isHabitScheduled(h, dayOfWeek)) { scheduled++; if (state.habitLog[h.id + ':' + dateStr]) completed++; }
-            });
-            const ratio = scheduled > 0 ? completed / scheduled : 0;
-            let bg;
-            if (ratio === 0) bg = 'var(--bg-overlay)';
-            else if (ratio < 0.5) bg = 'rgba(109, 212, 160, 0.2)';
-            else if (ratio < 1) bg = 'rgba(109, 212, 160, 0.45)';
-            else bg = 'rgba(109, 212, 160, 0.75)';
-            html += '<div class="habit-heatmap-cell" style="background:' + bg + '" title="' + dateStr + ': ' + completed + '/' + scheduled + '"></div>';
-          });
-          html += '</div></div>';
-          el.innerHTML = html;
+          el.innerHTML = '<div class="chart-container"><div class="chart-title" style="margin-bottom:8px">28-Day Heatmap</div>' + buildHeatmapHtml(activeHabits) + '</div>';
         }
       },
       { id: 'chart-habit-bars', label: 'Habit Completion Bars', type: 'full', icon: '\uD83D\uDCCA',
@@ -2499,21 +2477,6 @@
       });
       list.innerHTML = html;
       panel.classList.remove('hidden');
-
-      // Toggle handler
-      list.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-        cb.addEventListener('change', () => {
-          const id = cb.dataset.widgetId;
-          let widgets = getActiveWidgets().slice();
-          if (cb.checked) {
-            if (!widgets.includes(id)) widgets.push(id);
-          } else {
-            widgets = widgets.filter(wid => wid !== id);
-          }
-          if (!state.dashboardConfig) state.dashboardConfig = {};
-          state.dashboardConfig.widgets = widgets;
-        });
-      });
     }
 
     function closeDashboardConfig() {
@@ -2521,6 +2484,21 @@
       scheduleSave();
       renderDashboard();
     }
+
+    // Delegated handler for dashboard config checkboxes
+    document.getElementById('dashboard-config-list').addEventListener('change', (e) => {
+      const cb = e.target;
+      if (cb.type !== 'checkbox' || !cb.dataset.widgetId) return;
+      const id = cb.dataset.widgetId;
+      let widgets = getActiveWidgets().slice();
+      if (cb.checked) {
+        if (!widgets.includes(id)) widgets.push(id);
+      } else {
+        widgets = widgets.filter(wid => wid !== id);
+      }
+      if (!state.dashboardConfig) state.dashboardConfig = {};
+      state.dashboardConfig.widgets = widgets;
+    });
 
     document.getElementById('dashboard-config-btn').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -2649,8 +2627,7 @@
           const x = originX + step * i;
           const totalVal = proDisplay[i] + perDisplay[i];
           const y = originY - (totalVal / maxVal) * chartH;
-          if (i === 0) ctx.lineTo(x, y);
-          else ctx.lineTo(x, y);
+          ctx.lineTo(x, y);
         });
         ctx.lineTo(originX + step * (days.length - 1), originY);
         ctx.closePath();
@@ -2842,9 +2819,12 @@
     }
 
     // All-habits-complete day streak
+    let _dayStreakCache = { ts: 0, val: 0 };
     function getDayStreak() {
+      const now = Date.now();
+      if (now - _dayStreakCache.ts < 1000) return _dayStreakCache.val;
       const active = (state.habits || []).filter(h => !h.archived);
-      if (!active.length) return 0;
+      if (!active.length) return (_dayStreakCache = { ts: now, val: 0 }).val;
       let streak = 0;
       const d = new Date();
       for (let i = 0; i < 365; i++) {
@@ -2866,6 +2846,7 @@
         }
         d.setDate(d.getDate() - 1);
       }
+      _dayStreakCache = { ts: now, val: streak };
       return streak;
     }
 
@@ -2894,14 +2875,47 @@
     ];
     const FALLBACK_EMOJI = '\u2B50';
 
+    const _emojiCache = {};
     function getHabitEmoji(name) {
+      if (_emojiCache[name] !== undefined) return _emojiCache[name];
       const lower = name.toLowerCase();
       for (const group of HABIT_EMOJI_GROUPS) {
         for (const kw of group.keywords) {
-          if (lower.includes(kw)) return group.emoji;
+          if (lower.includes(kw)) return (_emojiCache[name] = group.emoji);
         }
       }
-      return FALLBACK_EMOJI;
+      return (_emojiCache[name] = FALLBACK_EMOJI);
+    }
+
+    function buildHeatmapHtml(activeHabits) {
+      let html = '<div style="display:flex;gap:2px;margin-bottom:4px">';
+      DAY_NAMES.forEach(n => { html += '<div class="habit-heatmap-label" style="flex:1">' + n.charAt(0) + '</div>'; });
+      html += '</div><div class="habit-heatmap">';
+      const heatDays = [];
+      const heatEnd = new Date();
+      const heatDow = heatEnd.getDay();
+      const heatMondayOff = heatDow === 0 ? -6 : 1 - heatDow;
+      const heatStart = new Date(heatEnd);
+      heatStart.setDate(heatEnd.getDate() + heatMondayOff - 21);
+      for (let i = 0; i < 28; i++) { const dd = new Date(heatStart); dd.setDate(heatStart.getDate() + i); heatDays.push(toDateStr(dd)); }
+      heatDays.forEach(dateStr => {
+        const dd = new Date(dateStr + 'T00:00:00');
+        const dow = dd.getDay();
+        const dayOfWeek = dow === 0 ? 6 : dow - 1;
+        let scheduled = 0, completed = 0;
+        activeHabits.forEach(h => {
+          if (isHabitScheduled(h, dayOfWeek)) { scheduled++; if (state.habitLog[h.id + ':' + dateStr]) completed++; }
+        });
+        const ratio = scheduled > 0 ? completed / scheduled : 0;
+        let bg;
+        if (ratio === 0) bg = 'var(--bg-overlay)';
+        else if (ratio < 0.5) bg = 'rgba(109, 212, 160, 0.2)';
+        else if (ratio < 1) bg = 'rgba(109, 212, 160, 0.45)';
+        else bg = 'rgba(109, 212, 160, 0.75)';
+        html += '<div class="habit-heatmap-cell" style="background:' + bg + '" title="' + dateStr + ': ' + completed + '/' + scheduled + '"></div>';
+      });
+      html += '</div>';
+      return html;
     }
 
     function getHabitStreak(habitId) {
@@ -3241,44 +3255,8 @@
 
       // 4-week mini heatmap
       perfHtml += '<div style="margin-top:12px"><div class="habit-perf-title">28-Day Heatmap</div>';
-      perfHtml += '<div style="display:flex;gap:2px;margin-bottom:4px">';
-      DAY_NAMES.forEach(n => { perfHtml += '<div class="habit-heatmap-label" style="flex:1">' + n.charAt(0) + '</div>'; });
-      perfHtml += '</div><div class="habit-heatmap">';
-
-      // Get last 28 days aligned to start on Monday
-      const heatDays = [];
-      const heatEnd = new Date();
-      const heatDow = heatEnd.getDay();
-      const heatMondayOff = heatDow === 0 ? -6 : 1 - heatDow;
-      const heatStart = new Date(heatEnd);
-      heatStart.setDate(heatEnd.getDate() + heatMondayOff - 21); // 4 weeks back, starting Monday
-      for (let i = 0; i < 28; i++) {
-        const dd = new Date(heatStart);
-        dd.setDate(heatStart.getDate() + i);
-        heatDays.push(toDateStr(dd));
-      }
-
-      heatDays.forEach(dateStr => {
-        const dd = new Date(dateStr + 'T00:00:00');
-        const dow = dd.getDay();
-        const dayOfWeek = dow === 0 ? 6 : dow - 1;
-        let scheduled = 0, completed = 0;
-        activeHabits.forEach(h => {
-          if (isHabitScheduled(h, dayOfWeek)) {
-            scheduled++;
-            if (state.habitLog[h.id + ':' + dateStr]) completed++;
-          }
-        });
-        const ratio = scheduled > 0 ? completed / scheduled : 0;
-        let bg;
-        if (ratio === 0) bg = 'var(--bg-overlay)';
-        else if (ratio < 0.5) bg = 'rgba(109, 212, 160, 0.2)';
-        else if (ratio < 1) bg = 'rgba(109, 212, 160, 0.45)';
-        else bg = 'rgba(109, 212, 160, 0.75)';
-
-        perfHtml += '<div class="habit-heatmap-cell" style="background:' + bg + '" title="' + dateStr + ': ' + completed + '/' + scheduled + '"></div>';
-      });
-      perfHtml += '</div></div>';
+      perfHtml += buildHeatmapHtml(activeHabits);
+      perfHtml += '</div>';
 
       perf.innerHTML = perfHtml;
     }
@@ -3392,7 +3370,7 @@
 
     // --- Init ---
     load();
-    setInterval(() => showQuote(true), 60000);
+    const quoteIntervalId = setInterval(() => showQuote(true), 60000);
   </script>
 </body>
 </html>

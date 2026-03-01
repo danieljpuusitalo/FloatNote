@@ -99,6 +99,9 @@ npm run build
 
 ## Version History
 
+### v1.3.1 — App Icon
+- Added app icon to installer and window title bar
+
 ### v1.3 — Habit Tracker & Configurable Dashboard
 - Full habit tracking system with weekly grid, custom schedules, streaks, XP leveling, heatmap, and bar charts
 - Configurable dashboard with 20 toggleable widgets and drag-and-drop reordering
