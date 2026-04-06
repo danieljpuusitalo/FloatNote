@@ -8,6 +8,11 @@ FloatNote is a productivity scratchpad with notes, checklists, habit tracking, a
 
 ## Features
 
+**Cross-Device Sync** (v1.4)
+- Firebase Realtime Database sync via passphrase
+- Bidirectional merge with conflict resolution (timestamps, soft deletes)
+- Anonymous authentication — no account required
+
 **Configurable Dashboard** (v1.3)
 - 20 widget options — 16 stat blocks + 4 full-width panels
 - Toggle widgets on/off via gear menu
@@ -35,19 +40,23 @@ FloatNote is a productivity scratchpad with notes, checklists, habit tracking, a
 - **Inline code** — Wrap text in backticks: `` `code` ``
 - **Smart paste** — Pastes as plain text by default; `Ctrl+Shift+V` for rich paste
 - **Full undo/redo** — `Ctrl+Z` / `Ctrl+Y` works across all formatting operations
+- **Search** — `Ctrl+F` to search sections within notes
 
 **Checklist Tab** (v1.1)
 - Per-task priority flags (high/medium/low)
 - Deadline assignment with calendar picker and overdue alerts
 - Sort by date added or priority
+- Drag-and-drop reordering
 - Clean list button to clear completed tasks
 
 **Core**
 - Floating always-on-top window
 - Two categories: Professional and Personal (notes + checklist)
+- Light and dark themes (paperwhite toggle)
+- Right-click context menu for formatting
 - Elastic overscroll with smooth bounce effect on all scrollable panels
 - Custom themed scrollbars
-- Stoic & existentialist quote rotation (60+ quotes)
+- Stoic & existentialist quote rotation (55+ quotes)
 - Onboarding with name and accent colour (purple, blue, green, pink, gold)
 - Persistent storage across sessions
 
@@ -82,6 +91,7 @@ npm run build
 | `Ctrl+L` | Toggle bullet list |
 | `Ctrl+Shift+L` | Toggle checklist |
 | `Tab` / `Shift+Tab` | Indent / outdent list item |
+| `Ctrl+F` | Search sections in notes |
 | `Ctrl+Z` | Undo |
 | `Ctrl+Y` | Redo |
 
@@ -98,6 +108,15 @@ npm run build
 ---
 
 ## Version History
+
+### v1.4.0 — Cross-Device Sync & Audit
+- Firebase Realtime Database sync with passphrase-based pairing
+- Bidirectional merge with timestamp-based conflict resolution
+- Anonymous authentication — no sign-up required
+- Paperwhite (light) theme toggle
+- Right-click context menu for formatting (bold, italic, bullets, headings, code, etc.)
+- Notes search (`Ctrl+F`) for jumping between sections
+- Codebase audit: fixed heatmap date calculation bug, removed dead CSS, consolidated dashboard styles
 
 ### v1.3.1 — App Icon
 - Added app icon to installer and window title bar
@@ -141,7 +160,7 @@ npm run build
 
 ## Philosophy
 
-FloatNote is intentionally simple. One HTML file. No frameworks. No dependencies beyond Electron. If it starts to feel like a full note-taking platform, something has gone wrong.
+FloatNote is intentionally simple. One HTML file. No frameworks. No dependencies beyond Electron and Firebase. If it starts to feel like a full note-taking platform, something has gone wrong.
 
 ---
 

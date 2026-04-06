@@ -37,6 +37,54 @@
       --border-light: rgba(255, 255, 255, 0.1);
     }
 
+    :root.paperwhite {
+      --bg-deep: #f5f3ef;
+      --bg-surface: #ffffff;
+      --bg-overlay: #eae7e1;
+      --bg-card: rgba(0, 0, 0, 0.03);
+      --bg-card-hover: rgba(0, 0, 0, 0.06);
+      --text-primary: #1a1a1a;
+      --text-secondary: #555555;
+      --text-muted: #999999;
+      --accent: #333333;
+      --accent-glow: rgba(0, 0, 0, 0.06);
+      --blue: #4a7ab5;
+      --green: #4a9e6e;
+      --red: #c45a5a;
+      --yellow: #b89440;
+      --border: rgba(0, 0, 0, 0.08);
+      --border-light: rgba(0, 0, 0, 0.12);
+    }
+    :root.paperwhite body::before { display: none; }
+    .paperwhite .titlebar { background: rgba(245, 243, 239, 0.95); }
+    .paperwhite .tabs { background: rgba(245, 243, 239, 0.9); }
+    .paperwhite .category-bar { background: rgba(245, 243, 239, 0.6); }
+    .paperwhite .titlebar-title {
+      background: none; -webkit-background-clip: unset;
+      -webkit-text-fill-color: #1a1a1a;
+    }
+    .paperwhite .onboarding-card h1 {
+      background: none; -webkit-background-clip: unset;
+      -webkit-text-fill-color: #1a1a1a;
+    }
+    .paperwhite .tab.active { color: #1a1a1a; border-bottom-color: #1a1a1a; }
+    .paperwhite .cat-btn.active-pro {
+      background: rgba(74, 122, 181, 0.1); color: var(--blue); border-color: rgba(74, 122, 181, 0.25);
+    }
+    .paperwhite .cat-btn.active-per {
+      background: rgba(74, 158, 110, 0.1); color: var(--green); border-color: rgba(74, 158, 110, 0.25);
+    }
+    .paperwhite ::selection { background: #1a1a1a; color: #ffffff; }
+
+    .theme-toggle {
+      width: 28px; height: 28px; border: none; border-radius: 6px;
+      background: var(--bg-card); cursor: pointer; display: flex;
+      align-items: center; justify-content: center; flex-shrink: 0;
+      transition: background 0.2s; -webkit-app-region: no-drag;
+      color: var(--text-muted); font-size: 14px; padding: 0;
+    }
+    .theme-toggle:hover { background: var(--bg-card-hover); color: var(--text-secondary); }
+
     body {
       font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
       background: var(--bg-deep);
@@ -180,6 +228,7 @@
     /* Tabs */
     .tabs {
       display: flex;
+      align-items: center;
       background: rgba(15, 15, 26, 0.9);
       flex-shrink: 0;
       padding: 0 8px;
@@ -297,6 +346,7 @@
       width: 16px; height: 16px; border: 2px solid var(--text-muted);
       border-radius: 4px; cursor: pointer; flex-shrink: 0;
       margin-top: 3px; transition: background 0.15s, border-color 0.15s; background: transparent;
+      position: relative;
     }
     .notes-editor .note-checklist .check-box:checked {
       background: var(--accent); border-color: var(--accent);
@@ -306,7 +356,6 @@
       width: 5px; height: 9px; border: solid white; border-width: 0 2px 2px 0;
       transform: rotate(45deg);
     }
-    .notes-editor .note-checklist .check-box { position: relative; }
     .notes-editor .note-checklist .check-text {
       flex: 1; outline: none; min-width: 0;
     }
@@ -318,6 +367,56 @@
     .notes-editor .indent-1 { margin-left: 28px; }
     .notes-editor .indent-2 { margin-left: 56px; }
     .notes-editor .indent-3 { margin-left: 84px; }
+
+    /* Notes search */
+    .notes-search-bar {
+      position: absolute; top: 0; left: 0; right: 0; z-index: 20;
+      display: none; padding: 6px 12px; background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .notes-search-bar.visible { display: block; }
+    .notes-search-bar input {
+      width: 100%; padding: 6px 10px; font-size: 12px; font-family: inherit;
+      background: var(--bg-overlay); border: 1px solid var(--border-light);
+      border-radius: 6px; color: var(--text-primary); outline: none;
+    }
+    .notes-search-bar input:focus { border-color: var(--accent); }
+    .notes-search-bar input::placeholder { color: var(--text-muted); }
+    .notes-search-results {
+      max-height: 180px; overflow-y: auto; margin-top: 4px;
+    }
+    .notes-search-results .search-result {
+      padding: 5px 10px; font-size: 11px; color: var(--text-secondary);
+      cursor: pointer; border-radius: 4px; transition: background 0.1s;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .notes-search-results .search-result:hover { background: var(--bg-card-hover); color: var(--text-primary); }
+    .notes-search-results .search-result .result-type {
+      font-size: 9px; color: var(--text-muted); margin-right: 6px;
+      text-transform: uppercase; letter-spacing: 0.3px;
+    }
+
+    /* Notes context menu */
+    .notes-context-menu {
+      position: fixed; z-index: 1000; min-width: 200px;
+      background: var(--bg-surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 4px 0;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.25); display: none;
+      font-family: 'Segoe UI', system-ui, sans-serif; font-size: 12.5px;
+    }
+    .notes-context-menu.visible { display: block; }
+    .notes-context-menu-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 6px 14px; cursor: pointer; color: var(--text-primary);
+      transition: background 0.1s;
+    }
+    .notes-context-menu-item:hover { background: var(--bg-overlay); }
+    .notes-context-menu-item .shortcut {
+      color: var(--text-muted); font-size: 11px; margin-left: 24px;
+    }
+    .notes-context-menu-sep {
+      height: 1px; background: var(--border); margin: 4px 8px;
+    }
 
     /* Inline code */
     .notes-editor code {
@@ -346,10 +445,20 @@
     .inline-input input::placeholder { color: var(--text-muted); font-style: italic; }
 
     .checklist-item {
-      display: flex; align-items: center; gap: 10px; padding: 9px 8px;
-      border-radius: 8px; transition: background 0.15s; border: 1px solid transparent;
-      position: relative;
+      display: flex; align-items: center; gap: 8px; padding: 9px 8px;
+      border-radius: 8px; transition: background 0.15s, opacity 0.2s, transform 0.2s ease;
+      border: 1px solid transparent; position: relative;
     }
+    .checklist-item.drag-over-above { box-shadow: 0 -2px 0 0 var(--accent); }
+    .checklist-item.drag-over-below { box-shadow: 0 2px 0 0 var(--accent); }
+    .checklist-item.dragging { opacity: 0.3; transform: scale(0.98); }
+    .drag-handle {
+      cursor: grab; color: var(--text-muted); font-size: 11px; opacity: 0;
+      transition: opacity 0.15s; flex-shrink: 0; user-select: none;
+      line-height: 1; width: 14px; text-align: center;
+    }
+    .checklist-item:hover .drag-handle { opacity: 0.5; }
+    .drag-handle:active { cursor: grabbing; }
     .checklist-item:hover {
       background: var(--bg-card-hover); border-color: var(--border);
     }
@@ -369,7 +478,14 @@
       border: solid white; border-width: 0 2px 2px 0;
       transform: rotate(45deg);
     }
-    .checklist-item .item-text { flex: 1; font-size: 13px; cursor: default; }
+    .checklist-item .item-text { flex: 1; min-width: 0; font-size: 13px; cursor: text; overflow-wrap: break-word; }
+    .checklist-item .item-text:hover { color: var(--accent); }
+    .checklist-item .item-edit-input {
+      flex: 1; font-size: 13px; font-family: inherit;
+      background: var(--bg-surface); border: 1px solid var(--accent);
+      border-radius: 4px; color: var(--text-primary);
+      padding: 2px 6px; outline: none;
+    }
     .checklist-item.checked .item-text { text-decoration: line-through; color: var(--text-muted); }
     .checklist-item .delete-btn {
       background: none; border: none; color: var(--text-muted); cursor: pointer;
@@ -378,10 +494,10 @@
     .checklist-item:hover .delete-btn { opacity: 1; }
     .checklist-item .delete-btn:hover { color: var(--red); }
 
-    /* Priority border accent */
-    .checklist-item.priority-high { border-left-color: var(--red) !important; }
-    .checklist-item.priority-medium { border-left-color: var(--yellow) !important; }
-    .checklist-item.priority-low { border-left-color: var(--blue) !important; }
+    /* Priority background tint */
+    .checklist-item.priority-high { background: rgba(192, 80, 78, 0.1); border-color: rgba(192, 80, 78, 0.15); }
+    .checklist-item.priority-medium { background: rgba(196, 160, 72, 0.1); border-color: rgba(196, 160, 72, 0.15); }
+    .checklist-item.priority-low { background: rgba(82, 139, 185, 0.1); border-color: rgba(82, 139, 185, 0.15); }
 
     /* Priority flag button */
     .priority-btn {
@@ -453,7 +569,6 @@
     }
 
     /* Dashboard */
-    .dashboard { flex: 1; overflow-y: auto; padding: 14px; }
 
     /* Stoic Quote */
     .quote-card {
@@ -526,6 +641,7 @@
       height: 2px;
       opacity: 0;
       transition: opacity 0.2s;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
     }
     .stat-card:hover::before { opacity: 1; }
     .stat-card:hover {
@@ -533,7 +649,6 @@
       border-color: var(--border-light);
       transform: translateY(-1px);
     }
-    .stat-card::before { background: linear-gradient(90deg, transparent, var(--accent), transparent); }
     .stat-icon { font-size: 18px; margin-bottom: 2px; }
     .stat-value {
       font-size: 26px; font-weight: 700;
@@ -650,7 +765,7 @@
     .habit-grid { flex: 1; overflow-y: auto; padding: 0 14px 10px; }
 
     .habit-grid-table {
-      width: 100%; border-collapse: collapse;
+      width: 100%; border-collapse: collapse; user-select: none; -webkit-user-select: none;
     }
     .habit-grid-table th {
       font-size: 10px; font-weight: 600; color: var(--text-muted);
@@ -806,7 +921,14 @@
     }
     .habit-manage-item:hover .habit-manage-btn { opacity: 1; }
     .habit-manage-btn:hover { color: var(--red); }
+    .habit-manage-btn.edit-btn:hover { color: var(--accent); }
     .habit-manage-btn.toggle-btn { opacity: 1; font-size: 11px; }
+    .habit-manage-name-input {
+      flex: 1; font-size: 13px; font-weight: 500; padding: 2px 6px;
+      border: 1px solid var(--accent); border-radius: 4px; outline: none;
+      background: var(--bg-card); color: var(--text-primary);
+      font-family: inherit;
+    }
     .habit-manage-btn.toggle-btn.is-active { color: var(--green); }
     .habit-manage-btn.toggle-btn.is-inactive { color: var(--text-muted); }
 
@@ -920,6 +1042,7 @@
 
     /* === Configurable Dashboard === */
     .dashboard {
+      flex: 1; overflow-y: auto; padding: 14px;
       position: relative;
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -1036,6 +1159,7 @@
     <div class="tab" data-tab="notes">Notes</div>
     <div class="tab" data-tab="checklist">Checklist</div>
     <div class="tab" data-tab="habits">Habits</div>
+    <button class="theme-toggle" id="theme-toggle" title="Toggle paperwhite theme"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
   </div>
 
   <!-- Dashboard -->
@@ -1052,12 +1176,32 @@
   </div>
 
   <!-- Notes -->
-  <div class="panel" id="panel-notes">
+  <div class="panel" id="panel-notes" style="position:relative;">
     <div class="category-bar">
       <button class="cat-btn active-pro" data-cat="professional" id="notes-cat-pro">Professional</button>
       <button class="cat-btn" data-cat="personal" id="notes-cat-per">Personal</button>
     </div>
+    <div class="notes-search-bar" id="notes-search-bar">
+      <input type="text" id="notes-search-input" placeholder="Search sections..." autocomplete="off">
+      <div class="notes-search-results" id="notes-search-results"></div>
+    </div>
     <div class="notes-editor" id="notes-editor" contenteditable="true"></div>
+    <div class="notes-context-menu" id="notes-context-menu">
+      <div class="notes-context-menu-item" data-action="bold">Bold<span class="shortcut">Ctrl+B</span></div>
+      <div class="notes-context-menu-item" data-action="italic">Italic<span class="shortcut">Ctrl+I</span></div>
+      <div class="notes-context-menu-item" data-action="underline">Underline<span class="shortcut">Ctrl+U</span></div>
+      <div class="notes-context-menu-item" data-action="strikethrough">Strikethrough<span class="shortcut">Ctrl+Shift+S</span></div>
+      <div class="notes-context-menu-sep"></div>
+      <div class="notes-context-menu-item" data-action="bullet">Bullet List<span class="shortcut">Ctrl+L</span></div>
+      <div class="notes-context-menu-item" data-action="numbered">Numbered List<span class="shortcut">1.&nbsp;</span></div>
+      <div class="notes-context-menu-item" data-action="checklist">Checklist<span class="shortcut">Ctrl+Shift+L</span></div>
+      <div class="notes-context-menu-sep"></div>
+      <div class="notes-context-menu-item" data-action="heading">Heading<span class="shortcut">##&nbsp;</span></div>
+      <div class="notes-context-menu-item" data-action="title">Title<span class="shortcut">#&nbsp;</span></div>
+      <div class="notes-context-menu-item" data-action="subheading">Subheading<span class="shortcut">###&nbsp;</span></div>
+      <div class="notes-context-menu-sep"></div>
+      <div class="notes-context-menu-item" data-action="code">Inline Code<span class="shortcut">`text`</span></div>
+    </div>
   </div>
 
   <!-- Checklist -->
@@ -1069,7 +1213,8 @@
     <div class="checklist-toolbar">
       <select class="sort-select" id="sort-select">
         <option value="none">&#x21F5; Sort</option>
-        <option value="date">Date added</option>
+        <option value="newest">Newest first</option>
+        <option value="oldest">Oldest first</option>
         <option value="priority">Priority</option>
       </select>
       <button class="clean-btn" id="clean-btn">Clean list</button>
@@ -1223,19 +1368,35 @@
 
     function applyPreferences(prefs) {
       if (!prefs) return;
-      const theme = COLOUR_MAP[prefs.color] || COLOUR_MAP.purple;
-      document.documentElement.style.setProperty('--accent', theme.accent);
-      document.documentElement.style.setProperty('--accent-glow', theme.glow);
+      const isPaperwhite = prefs.theme === 'paperwhite';
+      const root = document.documentElement;
+      if (isPaperwhite) {
+        root.classList.add('paperwhite');
+        root.style.removeProperty('--accent');
+        root.style.removeProperty('--accent-glow');
+      } else {
+        root.classList.remove('paperwhite');
+        const theme = COLOUR_MAP[prefs.color] || COLOUR_MAP.purple;
+        root.style.setProperty('--accent', theme.accent);
+        root.style.setProperty('--accent-glow', theme.glow);
+      }
+      const toggleBtn = document.getElementById('theme-toggle');
+      if (toggleBtn) toggleBtn.innerHTML = isPaperwhite
+        ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>'
+        : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
       document.querySelector('.titlebar-title').textContent = prefs.name + "'s FloatNote";
     }
 
     // --- State ---
     let state = {
       notes: { professional: '', personal: '' },
+      _notesLastEdit: { professional: 0, personal: 0 },
       checklist: { professional: [], personal: [] },
+      _deletedChecklist: [],
       completionLog: [],
       preferences: null,
       habits: [],
+      _deletedHabits: [],
       habitLog: {},
       dashboardConfig: null
     };
@@ -1243,7 +1404,7 @@
     let activeNotesCategory = 'professional';
     let activeChecklistCategory = 'professional';
     let chartMode = 'daily'; // 'daily' or 'cumulative'
-    let checklistSort = 'none'; // 'none' | 'date' | 'priority'
+    let checklistSort = 'none'; // 'none' | 'newest' | 'oldest' | 'priority'
     let activeHabitView = 'tracker'; // 'tracker' | 'manage'
     let habitWeekOffset = 0; // 0 = current week, -1 = last week, etc.
 
@@ -1269,6 +1430,7 @@
       const prev = undoStack.pop();
       editor.innerHTML = prev;
       state.notes[activeNotesCategory] = prev;
+      state._notesLastEdit[activeNotesCategory] = Date.now();
       scheduleSave();
       return true;
     }
@@ -1280,6 +1442,7 @@
       const next = redoStack.pop();
       editor.innerHTML = next;
       state.notes[activeNotesCategory] = next;
+      state._notesLastEdit[activeNotesCategory] = Date.now();
       scheduleSave();
       return true;
     }
@@ -1288,10 +1451,13 @@
     async function load() {
       const loaded = await window.api.loadData();
       state.notes = loaded.notes || { professional: '', personal: '' };
+      state._notesLastEdit = loaded._notesLastEdit || { professional: 0, personal: 0 };
       state.checklist = loaded.checklist || { professional: [], personal: [] };
+      state._deletedChecklist = loaded._deletedChecklist || [];
       state.completionLog = loaded.completionLog || [];
       state.preferences = loaded.preferences || null;
       state.habits = loaded.habits || [];
+      state._deletedHabits = loaded._deletedHabits || [];
       state.habitLog = loaded.habitLog || {};
       state.dashboardConfig = loaded.dashboardConfig || null;
 
@@ -1332,15 +1498,25 @@
     }
 
     // --- Tabs ---
-    document.querySelectorAll('.tab').forEach(tab => {
+    const _allTabs = document.querySelectorAll('.tab');
+    const _allPanels = document.querySelectorAll('.panel');
+    _allTabs.forEach(tab => {
       tab.addEventListener('click', () => {
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        _allTabs.forEach(t => t.classList.remove('active'));
+        _allPanels.forEach(p => p.classList.remove('active'));
         tab.classList.add('active');
         document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
         if (tab.dataset.tab === 'dashboard') renderDashboard();
         if (tab.dataset.tab === 'habits') renderActiveHabitView();
       });
+    });
+
+    // --- Theme toggle ---
+    document.getElementById('theme-toggle').addEventListener('click', () => {
+      if (!state.preferences) return;
+      state.preferences.theme = state.preferences.theme === 'paperwhite' ? 'dark' : 'paperwhite';
+      applyPreferences(state.preferences);
+      scheduleSave();
     });
 
     // --- Notes category toggle ---
@@ -1355,6 +1531,66 @@
     }
     document.getElementById('notes-cat-pro').addEventListener('click', () => setNotesCategory('professional'));
     document.getElementById('notes-cat-per').addEventListener('click', () => setNotesCategory('personal'));
+
+    // --- Notes search (Ctrl+F in notes panel) ---
+    const notesSearchBar = document.getElementById('notes-search-bar');
+    const notesSearchInput = document.getElementById('notes-search-input');
+    const notesSearchResults = document.getElementById('notes-search-results');
+
+    function openNotesSearch() {
+      notesSearchBar.classList.add('visible');
+      notesSearchInput.value = '';
+      notesSearchResults.innerHTML = '';
+      notesSearchInput.focus();
+    }
+    function closeNotesSearch() {
+      notesSearchBar.classList.remove('visible');
+      notesSearchInput.value = '';
+      notesSearchResults.innerHTML = '';
+    }
+    function runNotesSearch(query) {
+      notesSearchResults.innerHTML = '';
+      if (!query.trim()) return;
+      const editor = document.getElementById('notes-editor');
+      const sections = editor.querySelectorAll('.note-title, .note-heading, .note-subheading');
+      const q = query.toLowerCase();
+      let found = 0;
+      sections.forEach(section => {
+        const text = section.textContent.replace(/\u00d7$/, '').trim();
+        if (!text.toLowerCase().includes(q)) return;
+        found++;
+        const div = document.createElement('div');
+        div.className = 'search-result';
+        const typeLabel = section.classList.contains('note-title') ? 'Title' :
+          section.classList.contains('note-heading') ? 'Section' : 'Sub';
+        div.innerHTML = '<span class="result-type">' + typeLabel + '</span>' + escapeHtml(text);
+        div.addEventListener('click', () => {
+          closeNotesSearch();
+          section.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          section.style.transition = 'background 0.3s';
+          section.style.background = 'var(--accent-glow)';
+          setTimeout(() => { section.style.background = ''; }, 1200);
+        });
+        notesSearchResults.appendChild(div);
+      });
+    }
+    notesSearchInput.addEventListener('input', () => runNotesSearch(notesSearchInput.value));
+    notesSearchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeNotesSearch();
+      if (e.key === 'Enter') {
+        const first = notesSearchResults.querySelector('.search-result');
+        if (first) first.click();
+      }
+    });
+    document.addEventListener('keydown', (e) => {
+      const notesPanel = document.getElementById('panel-notes');
+      if (!notesPanel.classList.contains('active')) return;
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault();
+        if (notesSearchBar.classList.contains('visible')) closeNotesSearch();
+        else openNotesSearch();
+      }
+    });
 
     document.getElementById('notes-editor').addEventListener('input', (e) => {
       const editor = e.target;
@@ -1507,6 +1743,7 @@
         }
       }
       state.notes[activeNotesCategory] = editor.innerHTML;
+      state._notesLastEdit[activeNotesCategory] = Date.now();
       scheduleSave();
     });
 
@@ -1759,7 +1996,7 @@
         return;
       }
 
-      // Backspace: unwrap headings/titles/subheadings back to plain text
+      // Backspace: unwrap headings/titles/subheadings and bullets back to plain text
       if (e.key === 'Backspace') {
         const sel = window.getSelection();
         if (!sel.rangeCount) return;
@@ -1789,15 +2026,128 @@
             state.notes[activeNotesCategory] = editor.innerHTML;
             scheduleSave();
           }
+          return;
+        }
+
+        // Backspace on bullet / numbered / checklist: unwrap to plain div
+        let listEl = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+        // Walk up to the direct-child list element of the editor
+        while (listEl && listEl !== editor &&
+               !listEl.classList.contains('note-bullet') &&
+               !listEl.classList.contains('note-numbered') &&
+               !listEl.classList.contains('note-checklist')) {
+          listEl = listEl.parentElement;
+        }
+        if (listEl && listEl !== editor && listEl.closest('.notes-editor') === editor) {
+          // Determine cursor position - for checklists, check inside check-text span
+          let atStart = false;
+          if (listEl.classList.contains('note-checklist')) {
+            const checkText = listEl.querySelector('.check-text');
+            if (checkText) {
+              const textContent = checkText.textContent || '';
+              if (!textContent.trim()) {
+                atStart = true; // empty checklist item
+              } else if (node === checkText.firstChild && sel.anchorOffset === 0) {
+                atStart = true;
+              } else if (node === checkText && sel.anchorOffset === 0) {
+                atStart = true;
+              }
+            }
+          } else {
+            const textContent = listEl.textContent || '';
+            if (!textContent.trim()) {
+              atStart = true; // empty bullet/numbered
+            } else if (sel.anchorOffset === 0 && (node === listEl.firstChild || node === listEl)) {
+              atStart = true;
+            }
+          }
+
+          if (atStart) {
+            e.preventDefault();
+            const textContent = listEl.classList.contains('note-checklist')
+              ? (listEl.querySelector('.check-text')?.textContent || '').trim()
+              : (listEl.textContent || '').trim();
+            if (!textContent) {
+              // Empty list item: remove entirely
+              listEl.remove();
+            } else {
+              // Non-empty: convert to plain div, preserve text
+              const plain = document.createElement('div');
+              plain.textContent = textContent;
+              listEl.parentNode.replaceChild(plain, listEl);
+              const r = document.createRange();
+              r.setStart(plain.firstChild, 0);
+              r.collapse(true);
+              sel.removeAllRanges();
+              sel.addRange(r);
+            }
+            state.notes[activeNotesCategory] = editor.innerHTML;
+            scheduleSave();
+          }
         }
         return;
       }
 
-      // Enter: auto-continue bullets, numbered lists, and checklists
+      // Enter: handle headings (plain new line) and auto-continue bullets/numbered/checklists
       if (e.key === 'Enter' && !e.shiftKey) {
         const sel = window.getSelection();
         if (!sel.rangeCount) return;
         const node = sel.anchorNode;
+
+        // --- Heading / Title / Subheading: Enter creates a plain new line ---
+        const headingEl = node.nodeType === Node.TEXT_NODE
+          ? node.parentElement.closest('.note-heading, .note-title, .note-subheading')
+          : node.closest('.note-heading, .note-title, .note-subheading');
+        if (headingEl && headingEl.closest('.notes-editor') === editor) {
+          e.preventDefault();
+          // Remove the × delete button temporarily to get clean text
+          const delBtn = headingEl.querySelector('.section-delete');
+          if (delBtn) delBtn.remove();
+
+          // Split text at cursor position
+          const range = sel.getRangeAt(0);
+          const afterRange = document.createRange();
+          afterRange.setStart(range.startContainer, range.startOffset);
+          afterRange.setEndAfter(headingEl.lastChild || headingEl);
+          const afterFrag = afterRange.extractContents();
+          const afterText = afterFrag.textContent || '';
+
+          // Re-add the delete button to the heading
+          const newDel = document.createElement('span');
+          newDel.className = 'section-delete';
+          newDel.textContent = '\u00d7';
+          newDel.setAttribute('contenteditable', 'false');
+          headingEl.appendChild(newDel);
+
+          // If heading is now empty (only had the × button), give it a <br>
+          const headingText = headingEl.textContent.replace('\u00d7', '').trim();
+          if (!headingText) {
+            // Remove text nodes that are empty
+            Array.from(headingEl.childNodes).forEach(c => {
+              if (c !== newDel && c.nodeType === Node.TEXT_NODE && !c.textContent.trim()) c.remove();
+            });
+          }
+
+          // Create the new plain div after the heading
+          const plainDiv = document.createElement('div');
+          if (afterText.trim()) {
+            plainDiv.textContent = afterText;
+          } else {
+            plainDiv.innerHTML = '<br>';
+          }
+          headingEl.after(plainDiv);
+
+          // Place cursor at start of new plain div
+          const r = document.createRange();
+          r.setStart(plainDiv.firstChild || plainDiv, 0);
+          r.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(r);
+
+          state.notes[activeNotesCategory] = editor.innerHTML;
+          scheduleSave();
+          return;
+        }
 
         // Helper: find closest list-type ancestor
         let listItem = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
@@ -1921,6 +2271,254 @@
       document.execCommand('insertText', false, text);
     });
 
+    // --- Notes: right-click context menu ---
+    (function() {
+      const ctxMenu = document.getElementById('notes-context-menu');
+      const notesEditor = document.getElementById('notes-editor');
+      let savedSelection = null;
+
+      function saveSelection() {
+        const sel = window.getSelection();
+        if (sel.rangeCount > 0) {
+          savedSelection = sel.getRangeAt(0).cloneRange();
+        }
+      }
+
+      function restoreSelection() {
+        if (savedSelection) {
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(savedSelection);
+        }
+      }
+
+      function hideContextMenu() {
+        ctxMenu.classList.remove('visible');
+      }
+
+      notesEditor.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        saveSelection();
+
+        // Position menu at click coordinates (fixed positioning)
+        let x = e.clientX;
+        let y = e.clientY;
+
+        ctxMenu.style.left = x + 'px';
+        ctxMenu.style.top = y + 'px';
+        ctxMenu.classList.add('visible');
+
+        // Adjust if menu goes off-screen
+        requestAnimationFrame(() => {
+          const menuRect = ctxMenu.getBoundingClientRect();
+          if (menuRect.right > window.innerWidth) {
+            ctxMenu.style.left = (x - menuRect.width) + 'px';
+          }
+          if (menuRect.bottom > window.innerHeight) {
+            ctxMenu.style.top = (y - menuRect.height) + 'px';
+          }
+        });
+      });
+
+      // Helper: find direct-child block of editor for a given node
+      function findEditorBlock(n) {
+        let b = n.nodeType === Node.TEXT_NODE ? n.parentElement : n;
+        while (b && b !== notesEditor && b.parentElement !== notesEditor) b = b.parentElement;
+        return (b && b !== notesEditor) ? b : null;
+      }
+
+      // Helper: create heading element with delete button
+      function createHeadingEl(className, text) {
+        const el = document.createElement('div');
+        el.className = className;
+        el.textContent = text || '';
+        if (!text) el.innerHTML = '<br>';
+        const del = document.createElement('span');
+        del.className = 'section-delete';
+        del.textContent = '\u00d7';
+        del.setAttribute('contenteditable', 'false');
+        el.appendChild(del);
+        return el;
+      }
+
+      ctxMenu.addEventListener('mousedown', (e) => {
+        // Prevent blur that would lose selection
+        e.preventDefault();
+      });
+
+      ctxMenu.addEventListener('click', (e) => {
+        const item = e.target.closest('.notes-context-menu-item');
+        if (!item) return;
+        hideContextMenu();
+        restoreSelection();
+
+        const action = item.dataset.action;
+        const sel = window.getSelection();
+        pushUndo();
+
+        switch (action) {
+          case 'bold':
+            document.execCommand('bold');
+            break;
+          case 'italic':
+            document.execCommand('italic');
+            break;
+          case 'underline':
+            document.execCommand('underline');
+            break;
+          case 'strikethrough':
+            document.execCommand('strikeThrough');
+            break;
+          case 'code': {
+            if (sel.rangeCount) {
+              const range = sel.getRangeAt(0);
+              const selectedText = range.toString();
+              if (selectedText) {
+                range.deleteContents();
+                const codeEl = document.createElement('code');
+                codeEl.textContent = selectedText;
+                range.insertNode(codeEl);
+                // Place cursor after code element
+                const r = document.createRange();
+                r.setStartAfter(codeEl);
+                r.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(r);
+              }
+            }
+            break;
+          }
+          case 'bullet': {
+            // Reuse the same logic as Ctrl+L
+            if (!sel.rangeCount) break;
+            const range = sel.getRangeAt(0);
+            const startBlock = findEditorBlock(range.startContainer);
+            const endBlock = findEditorBlock(range.endContainer);
+            const blocks = [];
+            if (startBlock) {
+              let cur = startBlock;
+              while (cur) {
+                if (cur.nodeType === Node.ELEMENT_NODE && cur.parentElement === notesEditor) blocks.push(cur);
+                if (cur === endBlock) break;
+                cur = cur.nextElementSibling;
+              }
+            }
+            if (!blocks.length) { const b = findEditorBlock(sel.anchorNode); if (b) blocks.push(b); }
+            if (!blocks.length) break;
+            const allBullets = blocks.every(b => b.classList && b.classList.contains('note-bullet'));
+            const headingTypes = ['note-heading', 'note-title', 'note-subheading'];
+            blocks.forEach(block => {
+              if (allBullets) {
+                const plain = document.createElement('div');
+                plain.textContent = block.textContent || '';
+                if (!plain.textContent) plain.innerHTML = '<br>';
+                block.replaceWith(plain);
+              } else if (!block.classList.contains('note-bullet')) {
+                const isHeading = headingTypes.some(h => block.classList.contains(h));
+                if (!isHeading && block.tagName === 'DIV') block.className = 'note-bullet';
+              }
+            });
+            break;
+          }
+          case 'numbered': {
+            if (!sel.rangeCount) break;
+            const block = findEditorBlock(sel.anchorNode);
+            if (!block || block.tagName !== 'DIV') break;
+            if (block.classList.contains('note-numbered')) {
+              // Unwrap
+              const plain = document.createElement('div');
+              plain.textContent = block.textContent || '';
+              if (!plain.textContent) plain.innerHTML = '<br>';
+              block.replaceWith(plain);
+            } else {
+              const headingTypes = ['note-heading', 'note-title', 'note-subheading'];
+              if (headingTypes.some(h => block.classList.contains(h))) break;
+              // Find previous numbered sibling to get next number
+              let num = 1;
+              const prev = block.previousElementSibling;
+              if (prev && prev.classList.contains('note-numbered')) {
+                num = parseInt(prev.getAttribute('data-num') || '0') + 1;
+              }
+              block.className = 'note-numbered';
+              block.setAttribute('data-num', num);
+            }
+            break;
+          }
+          case 'checklist': {
+            if (!sel.rangeCount) break;
+            let block = findEditorBlock(sel.anchorNode);
+            // Handle check-text span case
+            if (block && block.classList && block.classList.contains('check-text')) block = block.parentElement;
+            if (!block || block.tagName !== 'DIV') break;
+            if (block.classList.contains('note-checklist')) {
+              const textSpan = block.querySelector('.check-text');
+              const plain = document.createElement('div');
+              plain.textContent = (textSpan ? textSpan.textContent : block.textContent) || '';
+              if (!plain.textContent) plain.innerHTML = '<br>';
+              block.replaceWith(plain);
+            } else {
+              const headingTypes = ['note-heading', 'note-title', 'note-subheading'];
+              if (headingTypes.some(h => block.classList.contains(h))) break;
+              const text = block.textContent || '';
+              const cl = document.createElement('div');
+              cl.className = 'note-checklist';
+              const cb = document.createElement('input');
+              cb.type = 'checkbox'; cb.className = 'check-box';
+              cb.setAttribute('contenteditable', 'false');
+              const span = document.createElement('span');
+              span.className = 'check-text';
+              span.setAttribute('contenteditable', 'true');
+              span.textContent = text;
+              if (!text) span.innerHTML = '<br>';
+              cl.appendChild(cb); cl.appendChild(span);
+              block.replaceWith(cl);
+            }
+            break;
+          }
+          case 'heading':
+          case 'title':
+          case 'subheading': {
+            if (!sel.rangeCount) break;
+            const block = findEditorBlock(sel.anchorNode);
+            if (!block || block.tagName !== 'DIV') break;
+            const classMap = { heading: 'note-heading', title: 'note-title', subheading: 'note-subheading' };
+            const targetClass = classMap[action];
+            // If already this heading type, unwrap
+            if (block.classList.contains(targetClass)) {
+              const text = block.textContent.replace('\u00d7', '').trim();
+              const plain = document.createElement('div');
+              plain.textContent = text || '';
+              if (!plain.textContent) plain.innerHTML = '<br>';
+              block.replaceWith(plain);
+            } else {
+              const text = block.classList.contains('note-heading') || block.classList.contains('note-title') || block.classList.contains('note-subheading')
+                ? block.textContent.replace('\u00d7', '').trim()
+                : block.textContent || '';
+              const el = createHeadingEl(targetClass, text);
+              block.replaceWith(el);
+            }
+            break;
+          }
+        }
+
+        state.notes[activeNotesCategory] = notesEditor.innerHTML;
+        scheduleSave();
+      });
+
+      // Close on click outside
+      document.addEventListener('click', (e) => {
+        if (!ctxMenu.contains(e.target)) hideContextMenu();
+      });
+
+      // Close on Escape
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') hideContextMenu();
+      });
+
+      // Close on scroll
+      notesEditor.addEventListener('scroll', hideContextMenu);
+    })();
+
     // --- Notes: section delete + checkbox toggle via event delegation ---
     document.getElementById('notes-editor').addEventListener('click', (e) => {
       // Section delete button (×)
@@ -1966,19 +2564,26 @@
 
     // --- Checklist ---
     const PRIORITY_CYCLE = ['none', 'high', 'medium', 'low'];
+    const PRIORITY_ORDER = { high: 0, medium: 1, low: 2, none: 3 };
 
     function getSortedItems(items) {
       const indexed = items.map((item, i) => ({ item, originalIndex: i }));
-      if (checklistSort === 'date') {
+      if (checklistSort === 'oldest') {
         indexed.sort((a, b) => {
           if (!a.item.addedAt && !b.item.addedAt) return 0;
           if (!a.item.addedAt) return 1;
           if (!b.item.addedAt) return -1;
           return a.item.addedAt.localeCompare(b.item.addedAt);
         });
+      } else if (checklistSort === 'newest') {
+        indexed.sort((a, b) => {
+          if (!a.item.addedAt && !b.item.addedAt) return 0;
+          if (!a.item.addedAt) return 1;
+          if (!b.item.addedAt) return -1;
+          return b.item.addedAt.localeCompare(a.item.addedAt);
+        });
       } else if (checklistSort === 'priority') {
-        const order = { high: 0, medium: 1, low: 2, none: 3 };
-        indexed.sort((a, b) => order[a.item.priority || 'none'] - order[b.item.priority || 'none']);
+        indexed.sort((a, b) => PRIORITY_ORDER[a.item.priority || 'none'] - PRIORITY_ORDER[b.item.priority || 'none']);
       }
       return indexed;
     }
@@ -2004,11 +2609,33 @@
       return [...(state.checklist.professional || []), ...(state.checklist.personal || [])];
     }
 
+    // Shared singleton date picker for checklist deadlines
+    let _sharedDatePicker = null;
+    let _datePickerTarget = null;
+    function getSharedDatePicker() {
+      if (_sharedDatePicker) return _sharedDatePicker;
+      _sharedDatePicker = document.createElement('input');
+      _sharedDatePicker.type = 'date';
+      _sharedDatePicker.style.cssText = 'position:fixed;top:-200px;left:-200px;opacity:0;width:0;height:0;border:0;padding:0;';
+      _sharedDatePicker.addEventListener('change', () => {
+        if (!_datePickerTarget) return;
+        const { cat, index } = _datePickerTarget;
+        const val = _sharedDatePicker.value || undefined;
+        if (val) state.checklist[cat][index].deadline = val;
+        else delete state.checklist[cat][index].deadline;
+        state.checklist[cat][index].updatedAt = Date.now();
+        _datePickerTarget = null;
+        if (_sharedDatePicker.parentNode) _sharedDatePicker.parentNode.removeChild(_sharedDatePicker);
+        scheduleSave();
+        renderChecklist();
+      });
+      return _sharedDatePicker;
+    }
+
     function renderChecklist(scrollToBottom) {
       const cat = activeChecklistCategory;
       const items = state.checklist[cat] || [];
       const container = document.getElementById('checklist-items');
-      document.querySelectorAll('input[data-checklist-picker]').forEach(el => el.remove());
       container.innerHTML = '';
 
       getSortedItems(items).forEach(({ item, originalIndex: i }) => {
@@ -2022,6 +2649,7 @@
         cb.addEventListener('change', () => {
           const wasDone = state.checklist[cat][i].done;
           state.checklist[cat][i].done = cb.checked;
+          state.checklist[cat][i].doneAt = Date.now();
           if (cb.checked && !wasDone) {
             state.completionLog.push({ date: todayStr(), category: cat });
           } else if (!cb.checked && wasDone) {
@@ -2039,25 +2667,33 @@
         const span = document.createElement('span');
         span.className = 'item-text';
         span.textContent = item.text;
+        span.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const editInput = document.createElement('input');
+          editInput.type = 'text';
+          editInput.className = 'item-edit-input';
+          editInput.value = item.text;
+          span.replaceWith(editInput);
+          editInput.focus();
+          editInput.select();
+          const commit = () => {
+            const newText = editInput.value.trim();
+            if (newText && newText !== item.text) {
+              state.checklist[cat][i].text = newText;
+              scheduleSave();
+            }
+            renderChecklist();
+          };
+          editInput.addEventListener('blur', commit);
+          editInput.addEventListener('keydown', (ke) => {
+            if (ke.key === 'Enter') { ke.preventDefault(); editInput.blur(); }
+            if (ke.key === 'Escape') { editInput.value = item.text; editInput.blur(); }
+          });
+        });
 
         const dateBadge = document.createElement('span');
         dateBadge.className = 'item-date-badge';
         dateBadge.textContent = formatAddedDate(item.addedAt);
-
-        // Deadline: hidden date input + calendar button
-        const deadlineInput = document.createElement('input');
-        deadlineInput.type = 'date';
-        deadlineInput.dataset.checklistPicker = 'true';
-        deadlineInput.style.cssText = 'position:fixed;top:-200px;left:-200px;opacity:0;width:0;height:0;border:0;padding:0;';
-        if (item.deadline) deadlineInput.value = item.deadline;
-        deadlineInput.addEventListener('change', () => {
-          const val = deadlineInput.value || undefined;
-          if (val) state.checklist[cat][i].deadline = val;
-          else delete state.checklist[cat][i].deadline;
-          if (deadlineInput.parentNode) deadlineInput.parentNode.removeChild(deadlineInput);
-          scheduleSave();
-          renderChecklist();
-        });
 
         const dlOverdue = item.deadline && isOverdue(item.deadline);
         const deadlineBtn = document.createElement('button');
@@ -2066,9 +2702,12 @@
         deadlineBtn.title = item.deadline ? 'Change deadline' : 'Set deadline';
         deadlineBtn.addEventListener('click', (e) => {
           e.stopPropagation();
-          if (!deadlineInput.parentNode) document.body.appendChild(deadlineInput);
-          if (deadlineInput.showPicker) deadlineInput.showPicker();
-          else deadlineInput.click();
+          const picker = getSharedDatePicker();
+          picker.value = item.deadline || '';
+          _datePickerTarget = { cat, index: i };
+          if (!picker.parentNode) document.body.appendChild(picker);
+          if (picker.showPicker) picker.showPicker();
+          else picker.click();
         });
 
         const priorityBtn = document.createElement('button');
@@ -2079,6 +2718,7 @@
         priorityBtn.addEventListener('click', () => {
           const cur = state.checklist[cat][i].priority || 'none';
           state.checklist[cat][i].priority = PRIORITY_CYCLE[(PRIORITY_CYCLE.indexOf(cur) + 1) % PRIORITY_CYCLE.length];
+          state.checklist[cat][i].updatedAt = Date.now();
           scheduleSave();
           renderChecklist();
         });
@@ -2087,11 +2727,21 @@
         del.className = 'delete-btn';
         del.textContent = '\u00d7';
         del.addEventListener('click', () => {
+          const deleted = state.checklist[cat][i];
+          const key = deleted.text + '|' + (deleted.addedAt || '');
+          state._deletedChecklist.push(key);
           state.checklist[cat].splice(i, 1);
           scheduleSave();
           renderChecklist();
         });
 
+        const handle = document.createElement('span');
+        handle.className = 'drag-handle';
+        handle.textContent = '\u2630';
+        if (checklistSort === 'none') handle.setAttribute('draggable', 'true');
+        else handle.style.display = 'none';
+
+        div.appendChild(handle);
         div.appendChild(cb);
         div.appendChild(span);
         if (item.deadline) {
@@ -2104,7 +2754,56 @@
         div.appendChild(deadlineBtn);
         div.appendChild(priorityBtn);
         div.appendChild(del);
+        div.dataset.origIdx = i;
         container.appendChild(div);
+      });
+
+      // Checklist drag-and-drop reorder
+      let _clDragIdx = null;
+      container.querySelectorAll('.checklist-item').forEach(row => {
+        const handle = row.querySelector('.drag-handle');
+        if (!handle) return;
+        handle.addEventListener('dragstart', (e) => {
+          _clDragIdx = parseInt(row.dataset.origIdx);
+          row.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', _clDragIdx);
+        });
+        handle.addEventListener('dragend', () => {
+          row.classList.remove('dragging');
+          container.querySelectorAll('.checklist-item').forEach(r => {
+            r.classList.remove('drag-over-above', 'drag-over-below');
+          });
+          _clDragIdx = null;
+        });
+        row.addEventListener('dragover', (e) => {
+          if (_clDragIdx === null) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          const rect = row.getBoundingClientRect();
+          const mid = rect.top + rect.height / 2;
+          row.classList.remove('drag-over-above', 'drag-over-below');
+          row.classList.add(e.clientY < mid ? 'drag-over-above' : 'drag-over-below');
+        });
+        row.addEventListener('dragleave', () => {
+          row.classList.remove('drag-over-above', 'drag-over-below');
+        });
+        row.addEventListener('drop', (e) => {
+          e.preventDefault();
+          row.classList.remove('drag-over-above', 'drag-over-below');
+          const fromIdx = parseInt(e.dataTransfer.getData('text/plain'));
+          const toIdx = parseInt(row.dataset.origIdx);
+          if (isNaN(fromIdx) || isNaN(toIdx) || fromIdx === toIdx) return;
+          const rect = row.getBoundingClientRect();
+          const mid = rect.top + rect.height / 2;
+          const arr = state.checklist[cat];
+          const [moved] = arr.splice(fromIdx, 1);
+          let insertAt = e.clientY < mid ? toIdx : toIdx + 1;
+          if (fromIdx < toIdx) insertAt--;
+          arr.splice(Math.max(0, insertAt), 0, moved);
+          scheduleSave();
+          renderChecklist();
+        });
       });
 
       const inputRow = document.createElement('div');
@@ -2140,8 +2839,12 @@
     // --- Clean list ---
     function cleanChecklist() {
       const cat = activeChecklistCategory;
-      const before = (state.checklist[cat] || []).length;
-      state.checklist[cat] = (state.checklist[cat] || []).filter(item => !item.done);
+      const items = state.checklist[cat] || [];
+      const before = items.length;
+      items.filter(item => item.done).forEach(item => {
+        state._deletedChecklist.push(item.text + '|' + (item.addedAt || ''));
+      });
+      state.checklist[cat] = items.filter(item => !item.done);
       if (state.checklist[cat].length < before) {
         scheduleSave();
         renderChecklist();
@@ -2527,6 +3230,23 @@
       }
     });
 
+    // roundRect polyfill for older browsers
+    if (!CanvasRenderingContext2D.prototype.roundRect) {
+      CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+        if (!Array.isArray(r)) r = [r, r, r, r];
+        this.moveTo(x + r[0], y);
+        this.lineTo(x + w - r[1], y);
+        this.quadraticCurveTo(x + w, y, x + w, y + r[1]);
+        this.lineTo(x + w, y + h - r[2]);
+        this.quadraticCurveTo(x + w, y + h, x + w - r[2], y + h);
+        this.lineTo(x + r[3], y + h);
+        this.quadraticCurveTo(x, y + h, x, y + h - r[3]);
+        this.lineTo(x, y + r[0]);
+        this.quadraticCurveTo(x, y, x + r[0], y);
+        this.closePath();
+      };
+    }
+
     function renderChart(log) {
       const canvas = document.getElementById('chart');
       if (!canvas) return;
@@ -2788,7 +3508,7 @@
     function getEffectiveSchedule(habit, weekDays) {
       const base = DAY_NAMES.map((_, i) => isHabitScheduled(habit, i));
       const count = base.filter(Boolean).length;
-      if (count >= 6) return base; // daily — not movable
+      if (count === 0 || count === 7) return base;
       const weekKey = weekDays[0];
       for (let from = 0; from < 7; from++) {
         const mk = 'move:' + habit.id + ':' + weekKey + ':' + from;
@@ -2805,7 +3525,7 @@
 
     function isHabitMovable(habit) {
       const count = DAY_NAMES.filter((_, i) => isHabitScheduled(habit, i)).length;
-      return count >= 1 && count <= 5;
+      return count >= 1 && count < 7;
     }
 
     function toggleHabitDay(habitId, dateStr) {
@@ -2815,6 +3535,7 @@
       } else {
         state.habitLog[key] = true;
       }
+      _dayStreakCache.ts = 0;
       scheduleSave();
     }
 
@@ -2822,7 +3543,7 @@
     let _dayStreakCache = { ts: 0, val: 0 };
     function getDayStreak() {
       const now = Date.now();
-      if (now - _dayStreakCache.ts < 1000) return _dayStreakCache.val;
+      if (now - _dayStreakCache.ts < 10000) return _dayStreakCache.val;
       const active = (state.habits || []).filter(h => !h.archived);
       if (!active.length) return (_dayStreakCache = { ts: now, val: 0 }).val;
       let streak = 0;
@@ -2897,7 +3618,7 @@
       const heatMondayOff = heatDow === 0 ? -6 : 1 - heatDow;
       const heatStart = new Date(heatEnd);
       heatStart.setDate(heatEnd.getDate() + heatMondayOff - 21);
-      for (let i = 0; i < 28; i++) { const dd = new Date(heatStart); dd.setDate(heatStart.getDate() + i); heatDays.push(toDateStr(dd)); }
+      for (let i = 0; i < 28; i++) { const _hd = new Date(heatStart); _hd.setDate(heatStart.getDate() + i); heatDays.push(toDateStr(_hd)); }
       heatDays.forEach(dateStr => {
         const dd = new Date(dateStr + 'T00:00:00');
         const dow = dd.getDay();
@@ -3183,8 +3904,9 @@
       habits.forEach((habit, idx) => {
         const active = !habit.archived;
         listHtml += '<div class="habit-manage-item">' +
-          '<span class="habit-manage-name' + (active ? '' : ' inactive') + '">' + getHabitEmoji(habit.name) + ' ' + escapeHtml(habit.name) + '</span>' +
+          '<span class="habit-manage-name' + (active ? '' : ' inactive') + '" data-idx="' + idx + '">' + getHabitEmoji(habit.name) + ' ' + escapeHtml(habit.name) + '</span>' +
           '<span class="habit-freq-badge">' + getFrequencyLabel(habit.frequency) + '</span>' +
+          '<button class="habit-manage-btn edit-btn" data-idx="' + idx + '" title="Rename">&#9998;</button>' +
           '<button class="habit-manage-btn toggle-btn ' + (active ? 'is-active' : 'is-inactive') + '" data-idx="' + idx + '" title="' + (active ? 'Deactivate' : 'Activate') + '">' + (active ? 'Active' : 'Inactive') + '</button>' +
           '<button class="habit-manage-btn delete-btn" data-idx="' + idx + '" title="Delete">\u00D7</button>' +
         '</div>';
@@ -3201,6 +3923,7 @@
         btn.addEventListener('click', () => {
           const i = parseInt(btn.dataset.idx);
           state.habits[i].archived = !state.habits[i].archived;
+          state.habits[i].updatedAt = Date.now();
           scheduleSave();
           renderHabitManage();
         });
@@ -3211,6 +3934,7 @@
         btn.addEventListener('click', () => {
           const i = parseInt(btn.dataset.idx);
           const habitId = state.habits[i].id;
+          state._deletedHabits.push(habitId);
           state.habits.splice(i, 1);
           // Clean up log entries and move keys for deleted habit
           Object.keys(state.habitLog).forEach(key => {
@@ -3218,6 +3942,37 @@
           });
           scheduleSave();
           renderHabitManage();
+        });
+      });
+
+      // Event: rename habit (inline edit)
+      list.querySelectorAll('.edit-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const i = parseInt(btn.dataset.idx);
+          const nameSpan = list.querySelector('.habit-manage-name[data-idx="' + i + '"]');
+          if (!nameSpan) return;
+          const currentName = state.habits[i].name;
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.className = 'habit-manage-name-input';
+          input.value = currentName;
+          nameSpan.replaceWith(input);
+          input.focus();
+          input.select();
+          const save = () => {
+            const newName = input.value.trim();
+            if (newName && newName !== currentName) {
+              state.habits[i].name = newName;
+              state.habits[i].updatedAt = Date.now();
+              scheduleSave();
+            }
+            renderHabitManage();
+          };
+          input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); save(); }
+            if (e.key === 'Escape') renderHabitManage();
+          });
+          input.addEventListener('blur', save);
         });
       });
 
@@ -3305,13 +4060,13 @@
         const name = e.target.value.trim();
         if (!name) return;
         const freq = document.getElementById('habit-freq-select').value;
-        if (!state.habits) state.habits = [];
         state.habits.push({
           id: 'h_' + Date.now(),
           name: name,
           frequency: freq,
           createdAt: todayStr(),
-          archived: false
+          archived: false,
+          updatedAt: Date.now()
         });
         e.target.value = '';
         scheduleSave();
@@ -3368,9 +4123,32 @@
       }, { passive: false });
     });
 
+    // --- Firebase remote sync listener ---
+    if (window.api && window.api.onRemoteUpdate) {
+      window.api.onRemoteUpdate((remote) => {
+        if (remote.notes) state.notes = remote.notes;
+        if (remote._notesLastEdit) state._notesLastEdit = remote._notesLastEdit;
+        if (remote.checklist) state.checklist = remote.checklist;
+        if (remote._deletedChecklist) state._deletedChecklist = remote._deletedChecklist;
+        if (remote.completionLog) state.completionLog = remote.completionLog;
+        if (remote.preferences) {
+          state.preferences = remote.preferences;
+          applyPreferences(state.preferences);
+        }
+        if (remote.habits) state.habits = remote.habits;
+        if (remote._deletedHabits) state._deletedHabits = remote._deletedHabits;
+        if (remote.habitLog) state.habitLog = remote.habitLog;
+        if (remote.dashboardConfig !== undefined) state.dashboardConfig = remote.dashboardConfig;
+
+        document.getElementById('notes-editor').innerHTML = state.notes[activeNotesCategory] || '';
+        renderChecklist();
+        renderDashboard();
+      });
+    }
+
     // --- Init ---
     load();
-    const quoteIntervalId = setInterval(() => showQuote(true), 60000);
+    setInterval(() => showQuote(true), 60000);
   </script>
 </body>
 </html>
