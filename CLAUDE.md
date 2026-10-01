@@ -14,9 +14,12 @@ not build targets of this one.
 
 ## Verify
 
-**`npm test`** — `node --test` over `test/`, covering `core.js`: capture parsing,
-v1→v2 migration, records/stamp/merge (with negative controls), carry-over,
-staleness, streak, suggestion intake.
+**`npm test`** — `node --test` over `test/`. `core.test.js` covers `core.js`: capture
+parsing, v1→v2 migration, records/stamp/merge, the patch window (a remote change
+must not undo an unsaved or in-flight local edit), carry-over, staleness, streak,
+suggestion intake. `sync.test.js` drives `sync.js` against an in-memory server:
+convergence, deletes, unticks, reconnect catch-up, tombstone purge, errors. Both
+carry negative controls.
 
 It covers the logic, not the UI. Anything about `index.html` or the window is a
 hand-check (`npm start`, see the data-dir trap below). Say which one a claim is.
@@ -38,7 +41,7 @@ hand-check (`npm start`, see the data-dir trap below). Say which one a claim is.
    `main.js` via `require`. It exists so the logic is testable. Logic that can be
    tested goes there; UI stays in `index.html`.
 3. `build.files` is an allowlist: `main.js`, `preload.js`, `index.html`, `core.js`,
-   `package.json`, `build/**`. A new runtime file not added there is simply absent
+   `sync.js`, `package.json`, `build/**`. A new runtime file not added there is simply absent
    from the installer, with no error.
 4. Test fixtures are invented data. Never paste real to-dos into `test/`.
 
@@ -66,4 +69,9 @@ hand-check (`npm start`, see the data-dir trap below). Say which one a claim is.
   *rules* are the security boundary, and they live only in the Firebase console.
 - v1 clients `set()` the whole of `sync/<passphrase>`, wiping anything nested under
   it. v2 therefore syncs to the sibling `sync/<passphrase>-v2`, never inside it.
+  An existing v1 `floatnote-sync.json` starts v2 sync on the next launch.
+- Sync runs in main only (`sync.js`); the renderer gets `remote-patch` messages.
+  Two copies against real Firebase: run each with its own `FLOATNOTE_DATA_DIR` and
+  a throwaway passphrase, and delete its `sync/<pass>-v2` node afterwards. Sync
+  races only show up there and only some runs, so repeat a pass before trusting it.
 - Electron 40 with electron-builder 25. NSIS one-click, per-user install.

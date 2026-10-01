@@ -488,6 +488,33 @@
     return state;
   }
 
+  // path → hash of each record in paths that exists in state.
+  function recordHashes(state, paths) {
+    const recs = toRecords(state);
+    const out = {};
+    for (const path of paths) if (path in recs) out[path] = hash(recs[path]);
+    return out;
+  }
+
+  // Apply each record only if state still holds what main held before the
+  // patch (before = recordHashes of main's state, absent = no record). The
+  // renderer saves 300ms after an edit, so a remote change can reach main
+  // while an edit is unsaved or its save is in flight. Such a record no
+  // longer matches and is left alone: the edit is newer, and its save stamps
+  // and pushes it. Returns the applied paths.
+  function applyPatchIfUnchanged(state, patch, before) {
+    const cur = toRecords(state);
+    const applied = [];
+    for (const [path, value] of Object.entries(patch)) {
+      const local = path in cur ? hash(cur[path]) : null;
+      const was = before && path in before ? before[path] : null;
+      if (local !== was) continue;
+      applyPath(state, path, value);
+      applied.push(path);
+    }
+    return applied;
+  }
+
   // ---------- clock: per-record timestamps without touching the UI code ----------
   //
   // clock: { path → { h: hash, t: ms, d?: true } }. The renderer saves whole
@@ -604,7 +631,7 @@
     startDay, needsPick, carryOvers,
     ingestSuggestions,
     emptyState, normalizeState, isV1, migrateV1,
-    toRecords, applyPath, applyPatch,
+    toRecords, applyPath, applyPatch, recordHashes, applyPatchIfUnchanged,
     stamp, toWire, wireValue, applyRemote, localIsNewer, newerThanRemote, purgeTombstones,
     encodeKey, decodeKey, pathToKey, keyToPath
   };

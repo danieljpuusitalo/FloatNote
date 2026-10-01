@@ -621,6 +621,36 @@
     .pick-row .t { flex: 1; min-width: 0; overflow-wrap: break-word; line-height: 1.4; }
     .pick-foot { text-align: center; margin-top: 10px; }
 
+    /* Settings */
+    .settings-overlay { z-index: 920; }
+    .settings-card { max-width: 380px; gap: 16px; overflow-y: auto; }
+    .settings-head { display: flex; align-items: center; justify-content: space-between; }
+    .set-sec { display: flex; flex-direction: column; gap: 6px; }
+    .set-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+    .set-status { font-size: 12px; color: var(--text-secondary); line-height: 1.4; }
+    .set-status.on { color: var(--green); }
+    .set-status.error { color: var(--red); }
+    .set-row { display: flex; gap: 6px; align-items: center; }
+    .set-row input {
+      flex: 1; min-width: 0; background: var(--bg-card); border: 1px solid var(--border-light);
+      border-radius: 6px; padding: 6px 8px; color: var(--text-primary); font-family: inherit;
+      font-size: 12px; outline: none;
+    }
+    .set-row input:focus { border-color: var(--accent); }
+    .set-note { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
+    .set-note:empty { display: none; }
+    .set-msg { font-size: 11px; color: var(--red); }
+    .set-msg:empty { display: none; }
+    .seg { display: flex; gap: 4px; }
+    .seg button {
+      width: 30px; height: 26px; border-radius: 6px; border: 1px solid var(--border-light);
+      background: var(--bg-card); color: var(--text-secondary); font-family: inherit; font-size: 12px; cursor: pointer;
+    }
+    .seg button.on { border-color: var(--accent); background: var(--accent-glow); color: var(--text-primary); font-weight: 700; }
+    .set-check { display: flex; align-items: center; gap: 8px; font-size: 12px; cursor: pointer; color: var(--text-secondary); }
+    .settings-card .card-btn.hidden { display: none; }
+    .theme-toggle.warn { color: var(--red); }
+
     /* Toast */
     .toast {
       position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 950;
@@ -991,6 +1021,7 @@
     <div class="tab active" data-tab="todo">To-do</div>
     <div class="tab" data-tab="notes">Notes</div>
     <div class="tab" data-tab="habits">Habits</div>
+    <button class="theme-toggle" id="btn-settings" title="Settings (Ctrl+,)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
     <button class="theme-toggle" id="theme-toggle" title="Toggle paperwhite theme"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
   </div>
 
@@ -1086,6 +1117,39 @@
 
   <div class="toast hidden" id="toast"></div>
 
+  <div class="pick-overlay settings-overlay hidden" id="settings-overlay">
+    <div class="pick-card settings-card" role="dialog" aria-label="Settings">
+      <div class="settings-head">
+        <span class="pick-title">Settings</span>
+        <button class="card-btn" id="settings-close">Close<kbd>Esc</kbd></button>
+      </div>
+      <div class="set-sec">
+        <div class="set-label">Sync</div>
+        <div class="set-status" id="sync-status"></div>
+        <div class="set-row">
+          <input type="password" id="sync-pass" autocomplete="off" spellcheck="false">
+          <button class="card-btn" id="sync-save">Connect</button>
+        </div>
+        <div class="set-msg" id="sync-msg"></div>
+        <div class="set-note">Use the same passphrase on your phone. Anyone who knows it can read your to-dos, so make it long.</div>
+        <div><button class="card-btn danger hidden" id="sync-off">Turn sync off</button></div>
+      </div>
+      <div class="set-sec">
+        <div class="set-label">Today holds</div>
+        <div class="seg" id="cap-seg"><button data-n="1">1</button><button data-n="2">2</button><button data-n="3">3</button><button data-n="4">4</button><button data-n="5">5</button></div>
+      </div>
+      <div class="set-sec">
+        <div class="set-label">Capture hotkey</div>
+        <div class="set-row"><input type="text" id="hotkey-input" readonly title="Click, then press the keys"></div>
+        <div class="set-note" id="hotkey-note"></div>
+      </div>
+      <div class="set-sec">
+        <label class="set-check"><input type="checkbox" id="login-check"> Start FloatNote when Windows starts</label>
+        <div class="set-note" id="login-note"></div>
+      </div>
+    </div>
+  </div>
+
   <script src="core.js"></script>
   <script>
     // --- Colour themes ---
@@ -1127,6 +1191,7 @@
     let state = FN.emptyState();
     let loaded = false;
     let saveTimeout = null;
+    let remoteSeq = 0;           // the last remote patch applied; sent with each save
     let activeNotesCategory = 'professional';
     let activeHabitView = 'tracker';
     let habitWeekOffset = 0; // 0 = current week, -1 = last week, etc.
@@ -1200,7 +1265,11 @@
     function scheduleSave() {
       if (!loaded) return;
       clearTimeout(saveTimeout);
-      saveTimeout = setTimeout(() => window.api.saveData(state), 300);
+      saveTimeout = setTimeout(sendSave, 300);
+    }
+
+    function sendSave() {
+      return window.api.saveData(state, remoteSeq);
     }
 
     function toDateStr(d) {
@@ -2720,6 +2789,7 @@
 
     // --- To-do: keyboard ---
     document.addEventListener('keydown', (e) => {
+      if (settingsOpen()) return;
       if (pick) { pickKey(e); return; }
       if (!document.getElementById('panel-todo').classList.contains('active')) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -3557,9 +3627,12 @@
     });
 
     // --- Remote sync: per-record patches from main ---
-    window.api.onRemotePatch((patch) => {
+    // Before load() finishes, the state it loads already holds the patch.
+    window.api.onRemotePatch((patch, seq, before) => {
       if (!loaded) return;
-      FN.applyPatch(state, patch);
+      remoteSeq = seq;
+      // A record edited here since main last saw it keeps the edit (see core).
+      FN.applyPatchIfUnchanged(state, patch, before);
       const editor = document.getElementById('notes-editor');
       // Leave the editor alone while it is being typed in.
       if (('notes/' + activeNotesCategory) in patch && document.activeElement !== editor) {
@@ -3572,9 +3645,175 @@
     // main asks for one last save before quitting
     window.api.onFlush(async () => {
       clearTimeout(saveTimeout);
-      try { if (loaded) await window.api.saveData(state); }
+      try { if (loaded) await sendSave(); }
       finally { window.api.flushed(); }
     });
+
+    // --- Settings ---
+    const settingsEl = document.getElementById('settings-overlay');
+    const syncPass = document.getElementById('sync-pass');
+    const syncMsg = document.getElementById('sync-msg');
+    const syncOff = document.getElementById('sync-off');
+    const hotkeyInput = document.getElementById('hotkey-input');
+    let info = null;             // from main: sync status, live hotkey; never the passphrase
+
+    function settingsOpen() { return !settingsEl.classList.contains('hidden'); }
+
+    function ago(ms) {
+      const m = Math.round((Date.now() - ms) / 60000);
+      if (m < 1) return 'just now';
+      if (m < 60) return m + ' min ago';
+      const h = Math.round(m / 60);
+      return h < 24 ? h + ' h ago' : Math.round(h / 24) + ' d ago';
+    }
+
+    function syncLine(i) {
+      const s = i.sync || {};
+      if (s.mode === 'on') return ['on', 'On' + (s.lastSync ? ', last synced ' + ago(s.lastSync) : '')];
+      if (s.mode === 'connecting') return ['', 'Connecting\u2026'];
+      if (s.mode === 'offline') return ['', 'Offline. Changes are kept and sync when the connection is back.'];
+      if (s.mode === 'error') return ['error', 'Not syncing: ' + (s.error || 'unknown error')];
+      return ['', 'Off. Nothing leaves this computer.'];
+    }
+
+    function renderSettings() {
+      if (!info) return;
+      const [cls, text] = syncLine(info);
+      const st = document.getElementById('sync-status');
+      st.className = 'set-status ' + cls;
+      st.textContent = text;
+      syncOff.classList.toggle('hidden', !info.configured);
+      syncPass.placeholder = info.configured ? 'New passphrase, to switch' : 'Passphrase, at least 8 characters';
+      document.getElementById('sync-save').textContent = info.configured ? 'Switch' : 'Connect';
+      document.querySelectorAll('#cap-seg button').forEach(b => b.classList.toggle('on', Number(b.dataset.n) === todayCap()));
+      const recording = document.activeElement === hotkeyInput;
+      if (!recording) hotkeyInput.value = state.preferences.hotkey || FN.DEFAULT_PREFS.hotkey;
+      document.getElementById('hotkey-note').textContent = recording ? 'Press the new keys. Esc cancels.'
+        : !info.hotkey ? 'No capture hotkey is active: this one and every fallback are taken.'
+        : info.hotkey !== info.wantedHotkey ? info.wantedHotkey + ' is taken by another app, so ' + info.hotkey + ' is the live one.'
+        : '';
+      document.getElementById('login-check').checked = !!state.preferences.launchAtLogin;
+      document.getElementById('login-note').textContent = info.packaged ? '' : 'Only takes effect in the installed app.';
+    }
+
+    function renderGear() {
+      const g = document.getElementById('btn-settings');
+      const bad = info && info.sync && info.sync.mode === 'error';
+      g.classList.toggle('warn', !!bad);
+      g.title = bad ? 'Sync is not working: open Settings' : 'Settings (Ctrl+,)';
+    }
+
+    function openSettings() {
+      settingsEl.classList.remove('hidden');
+      renderSettings();
+      window.api.getInfo().then(i => { info = i; renderSettings(); renderGear(); });
+    }
+    function closeSettings() {
+      if (document.activeElement === hotkeyInput) hotkeyInput.blur();
+      settingsEl.classList.add('hidden');
+      syncPass.value = '';
+      syncMsg.textContent = '';
+      syncOff.textContent = 'Turn sync off';
+      delete syncOff.dataset.armed;
+    }
+
+    async function setPassphrase(p) {
+      const res = await window.api.setPassphrase(p);
+      syncMsg.textContent = res.ok ? '' : res.error;
+      if (res.ok) syncPass.value = '';
+      return res.ok;
+    }
+    function connectSync() {
+      const p = syncPass.value.trim();
+      if (!p) { syncMsg.textContent = 'Type a passphrase first.'; return; }
+      setPassphrase(p);
+    }
+
+    document.getElementById('btn-settings').addEventListener('click', () => settingsOpen() ? closeSettings() : openSettings());
+    document.getElementById('settings-close').addEventListener('click', closeSettings);
+    settingsEl.addEventListener('mousedown', (e) => { if (e.target === settingsEl) closeSettings(); });
+    document.getElementById('sync-save').addEventListener('click', connectSync);
+    syncPass.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); connectSync(); } });
+    // Turning off forgets the passphrase, so it takes a second click.
+    syncOff.addEventListener('click', async () => {
+      if (!syncOff.dataset.armed) {
+        syncOff.dataset.armed = '1';
+        syncOff.textContent = 'Click again: you will need the passphrase to turn it back on';
+        return;
+      }
+      delete syncOff.dataset.armed;
+      syncOff.textContent = 'Turn sync off';
+      await setPassphrase('');
+    });
+    document.getElementById('cap-seg').addEventListener('click', (e) => {
+      const n = Number(e.target.dataset && e.target.dataset.n);
+      if (!n) return;
+      state.preferences.todayCap = n;
+      changed();
+      renderSettings();
+    });
+    document.getElementById('login-check').addEventListener('change', (e) => {
+      state.preferences.launchAtLogin = e.target.checked;
+      scheduleSave();
+    });
+
+    // Hotkey recorder. The live hotkey is released while recording, so pressing
+    // it here records it instead of opening the popup.
+    function accelFrom(e) {
+      const c = e.code;
+      let key = null;
+      if (c === 'Space') key = 'Space';
+      else if (/^Key[A-Z]$/.test(c)) key = c.slice(3);
+      else if (/^Digit[0-9]$/.test(c)) key = c.slice(5);
+      else if (/^F([1-9]|1[0-9]|2[0-4])$/.test(c)) key = c;
+      else if (/^Arrow(Up|Down|Left|Right)$/.test(c)) key = c.slice(5);
+      else if (['Home', 'End', 'PageUp', 'PageDown', 'Insert', 'Delete'].includes(c)) key = c;
+      if (!key) return null;
+      // A bare or Shift-only key would steal ordinary typing in every app.
+      if (!(e.ctrlKey || e.altKey || e.metaKey) && !/^F\d/.test(key)) return null;
+      const mods = [];
+      if (e.ctrlKey) mods.push('Ctrl');
+      if (e.altKey) mods.push('Alt');
+      if (e.shiftKey) mods.push('Shift');
+      if (e.metaKey) mods.push('Super');
+      return mods.concat(key).join('+');
+    }
+    hotkeyInput.addEventListener('focus', () => {
+      window.api.pauseHotkey(true);
+      hotkeyInput.value = '';
+      renderSettings();
+    });
+    hotkeyInput.addEventListener('blur', () => {
+      window.api.pauseHotkey(false);
+      renderSettings();
+    });
+    hotkeyInput.addEventListener('keydown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === 'Escape' || e.key === 'Tab') { hotkeyInput.blur(); return; }
+      const accel = accelFrom(e);
+      if (!accel) return;
+      state.preferences.hotkey = accel;
+      // Save now, so main has the new key before the blur un-pauses it.
+      clearTimeout(saveTimeout);
+      sendSave();
+      hotkeyInput.blur();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (CAPTURE) return;
+      if ((e.ctrlKey || e.metaKey) && e.key === ',') { e.preventDefault(); settingsOpen() ? closeSettings() : openSettings(); return; }
+      if (settingsOpen() && e.key === 'Escape') { e.preventDefault(); closeSettings(); }
+    });
+
+    window.api.onInfo((i) => {
+      info = i;
+      renderGear();
+      if (settingsOpen()) renderSettings();
+    });
+    if (!CAPTURE) window.api.getInfo().then(i => { info = i; renderGear(); });
+    // "last synced n min ago" stays true while the screen is open
+    setInterval(() => { if (settingsOpen()) renderSettings(); }, 30000);
 
     // --- Hotkey capture ---
     const pendingCaptures = [];

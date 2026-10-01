@@ -65,6 +65,7 @@
       "preload.js",
       "index.html",
       "core.js",
+      "sync.js",
       "package.json",
       "build/**"
     ]

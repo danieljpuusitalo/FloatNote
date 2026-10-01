@@ -523,6 +523,93 @@ test('sync: notes and completions travel', () => {
   assert.ok(b.state.completions['c_' + id]);
 });
 
+// The renderer saves 300ms after an edit, so a remote change can reach main
+// while an edit is unsaved or its save is in flight. Main sends each patch with
+// the hashes it held before it (main.js onRemote), and both the renderer and
+// main's replay of unseen patches apply a record only if it still matches.
+
+function remoteEdit(state, id, text) {
+  const item = C.clone(state.items[id]);
+  item.text = text;
+  return { ['items/' + id]: item };
+}
+
+// What main does on a remote patch: note the before-hashes, then apply.
+function mainApplies(main, patch) {
+  const before = C.recordHashes(main, Object.keys(patch));
+  C.applyPatch(main, patch);
+  return before;
+}
+
+test('patch window: a remote edit does not undo an unsaved local delete', () => {
+  const main = C.migrateV1(v1Fixture(), T);
+  const id = Object.keys(main.items)[0];
+  const rendered = C.clone(main);
+  delete rendered.items[id];
+  const patch = remoteEdit(main, id, 'edited elsewhere');
+  const before = mainApplies(main, patch);
+  assert.deepEqual(C.applyPatchIfUnchanged(rendered, patch, before), []);
+  assert.equal(rendered.items[id], undefined);
+});
+
+test('patch window: a remote edit does not undo an unsaved local edit', () => {
+  const main = C.migrateV1(v1Fixture(), T);
+  const id = Object.keys(main.items)[0];
+  const rendered = C.clone(main);
+  rendered.items[id].text = 'edited here';
+  const patch = remoteEdit(main, id, 'edited elsewhere');
+  C.applyPatchIfUnchanged(rendered, patch, mainApplies(main, patch));
+  assert.equal(rendered.items[id].text, 'edited here');
+});
+
+test('patch window: untouched records take every patch in turn', () => {
+  const main = C.migrateV1(v1Fixture(), T);
+  const [id, other] = Object.keys(main.items);
+  const rendered = C.clone(main);
+  rendered.items[other].text = 'edited here';
+  for (const text of ['one', 'two']) {
+    const patch = remoteEdit(main, id, text);
+    assert.deepEqual(C.applyPatchIfUnchanged(rendered, patch, mainApplies(main, patch)), ['items/' + id]);
+  }
+  assert.equal(rendered.items[id].text, 'two');
+  const del = { ['items/' + id]: null };
+  C.applyPatchIfUnchanged(rendered, del, mainApplies(main, del));
+  assert.equal(rendered.items[id], undefined, 'a remote delete lands too');
+  const add = { ['items/i_new']: C.makeItem({ id: 'i_new', text: 'added elsewhere' }, T) };
+  C.applyPatchIfUnchanged(rendered, add, mainApplies(main, add));
+  assert.equal(rendered.items.i_new.text, 'added elsewhere', 'and a remote add');
+  assert.equal(rendered.items[other].text, 'edited here');
+});
+
+test('patch window: a delete whose save was in flight survives on both sides', () => {
+  const main = C.migrateV1(v1Fixture(), T);
+  const [id, other] = Object.keys(main.items);
+  const rendered = C.clone(main);
+  delete rendered.items[id];
+  const saved = C.clone(rendered);                  // the save is in flight
+  const patch = Object.assign(remoteEdit(main, id, 'edited elsewhere'), remoteEdit(main, other, 'also elsewhere'));
+  const before = mainApplies(main, patch);          // main applies the patch first
+  // main gets the save and replays the patch it had not seen
+  const replayed = C.normalizeState(saved);
+  C.applyPatchIfUnchanged(replayed, patch, before);
+  assert.equal(replayed.items[id], undefined, 'main keeps the delete');
+  assert.equal(replayed.items[other].text, 'also elsewhere', 'and replays the record it did not touch');
+  // then the patch reaches the renderer, which has already saved the delete
+  C.applyPatchIfUnchanged(rendered, patch, before);
+  assert.equal(rendered.items[id], undefined, 'the renderer keeps it too');
+  assert.equal(rendered.items[other].text, 'also elsewhere');
+  assert.equal(C.stableStringify(C.toRecords(rendered)), C.stableStringify(C.toRecords(replayed)));
+});
+
+test('negative control: a plain patch apply resurrects the deleted item', () => {
+  const main = C.migrateV1(v1Fixture(), T);
+  const id = Object.keys(main.items)[0];
+  const rendered = C.clone(main);
+  delete rendered.items[id];
+  C.applyPatch(rendered, remoteEdit(main, id, 'edited elsewhere'));
+  assert.equal(rendered.items[id].text, 'edited elsewhere', 'so the patch-window tests above are discriminating');
+});
+
 // Negative controls: prove the convergence checks can fail.
 
 test('negative control: a last-arrival-wins merge loses the newer edit', () => {

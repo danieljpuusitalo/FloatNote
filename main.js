@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, Tray, Menu, screen, shell, globalShortcut }
 const path = require('path');
 const fs = require('fs');
 const C = require('./core');
+const { createSync, firebaseBackend } = require('./sync');
 
 // FLOATNOTE_DATA_DIR runs a second, independent copy (sync testing, or a dry run
 // against a copy of real data). It must be set before anything reads userData,
@@ -16,6 +17,7 @@ const DATA_PATH = path.join(DATA_DIR, 'floatnote-data.json');
 const V1_BACKUP_PATH = path.join(DATA_DIR, 'floatnote-data.v1.json');
 const CLOCK_PATH = path.join(DATA_DIR, 'floatnote-clock.json');
 const WINDOW_PATH = path.join(DATA_DIR, 'floatnote-window.json');
+const SYNC_PATH = path.join(DATA_DIR, 'floatnote-sync.json');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 const BACKUP_KEEP = 14;
 
@@ -95,14 +97,72 @@ function applyLoginItem(prefs) {
   appliedLoginItem = want;
 }
 
-function saveState(data) {
+// seenSeq: the last remote patch the renderer had applied when it saved. Any
+// patch after that is re-applied first, so a save already in flight when a
+// remote change arrived cannot stamp the old value as newer and push it back.
+// Only onto records the renderer left as they were before the patch: one it
+// changed is a newer local edit, and this save stamps it.
+function saveState(data, seenSeq) {
   state = C.normalizeState(data);
+  if (typeof seenSeq === 'number') {
+    unseen = unseen.filter(e => e.seq > seenSeq);
+    for (const e of unseen) C.applyPatchIfUnchanged(state, e.patch, e.before);
+  }
   dailyBackup();
   writeJsonAtomic(DATA_PATH, state);
   const changed = C.stamp(clock, C.toRecords(state), Date.now());
   if (changed.length) writeJsonAtomic(CLOCK_PATH, clock);
+  if (sync) sync.push(changed);
   applyLoginItem(state.preferences);
+  const wanted = state.preferences.hotkey || C.DEFAULT_PREFS.hotkey;
+  if (wanted !== wantedHotkey && !hotkeyPaused) registerHotkey(wanted);
   return changed;
+}
+
+// ---------- sync ----------
+
+let sync = null;
+let patchSeq = 0;
+let unseen = [];   // remote patches sent to the renderer, newer than its last save
+
+function readPassphrase() {
+  const c = readJson(SYNC_PATH);
+  return c && typeof c.passphrase === 'string' ? c.passphrase.trim() : '';
+}
+
+function send(channel, ...args) {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, ...args);
+}
+
+// What the settings screen shows. Never includes the passphrase itself.
+function info() {
+  return {
+    sync: sync ? sync.status() : { mode: 'off' },
+    configured: !!readPassphrase(),
+    hotkey,
+    wantedHotkey,
+    packaged: app.isPackaged
+  };
+}
+
+function setupSync() {
+  sync = createSync({
+    backend: firebaseBackend(),
+    clock,
+    getRecords: () => C.toRecords(state),
+    onRemote: (patch) => {
+      const before = C.recordHashes(state, Object.keys(patch));
+      C.applyPatch(state, patch);
+      writeJsonAtomic(DATA_PATH, state);
+      writeJsonAtomic(CLOCK_PATH, clock);
+      if (!Object.keys(patch).length) return;
+      const seq = ++patchSeq;
+      unseen.push({ seq, patch, before });
+      send('remote-patch', patch, seq, before);
+    },
+    onStatus: () => send('info', info())
+  });
+  sync.start(readPassphrase());
 }
 
 // ---------- window ----------
@@ -248,9 +308,13 @@ function toggleCapture() {
 // tray which key is live.
 const HOTKEY_FALLBACKS = ['Ctrl+Alt+N', 'Ctrl+Shift+Alt+Space'];
 
+let wantedHotkey = null;
+let hotkeyPaused = false;   // while the settings screen records a new key
+
 function registerHotkey(wanted) {
   if (hotkey) globalShortcut.unregister(hotkey);
   hotkey = null;
+  wantedHotkey = wanted;
   for (const accel of [wanted, ...HOTKEY_FALLBACKS.filter(k => k !== wanted)]) {
     let ok = false;
     try { ok = globalShortcut.register(accel, toggleCapture); } catch (e) { ok = false; }
@@ -258,6 +322,7 @@ function registerHotkey(wanted) {
   }
   if (hotkey !== wanted) console.warn('FloatNote: hotkey ' + wanted + ' is taken; using ' + (hotkey || 'none'));
   updateTray();
+  send('info', info());
   return hotkey;
 }
 
@@ -295,6 +360,7 @@ if (!app.requestSingleInstanceLock()) {
     createTray();
     createCaptureWindow();
     registerHotkey(state.preferences.hotkey || C.DEFAULT_PREFS.hotkey);
+    setupSync();
   });
 
   app.on('will-quit', () => globalShortcut.unregisterAll());
@@ -322,8 +388,31 @@ if (!app.requestSingleInstanceLock()) {
 
 // ---------- IPC ----------
 
-ipcMain.handle('load-data', () => state || loadState());
-ipcMain.handle('save-data', (_event, data) => { saveState(data); });
+ipcMain.handle('load-data', (event) => {
+  // The main window starts from current state, so no earlier patch is unseen.
+  if (mainWindow && event.sender === mainWindow.webContents) unseen = [];
+  return state || loadState();
+});
+ipcMain.handle('save-data', (_event, data, seenSeq) => { saveState(data, seenSeq); });
+ipcMain.handle('get-info', () => info());
+
+// Firebase keys cannot hold . # $ [ ] /, and the passphrase is part of the key.
+// It is also the only thing between the data and anyone who guesses it.
+ipcMain.handle('set-passphrase', (_event, raw) => {
+  const p = typeof raw === 'string' ? raw.trim() : '';
+  if (p && p.length < 8) return { ok: false, error: 'Use at least 8 characters.' };
+  if (/[.#$\[\]\/]/.test(p)) return { ok: false, error: 'The characters . # $ [ ] / are not allowed.' };
+  writeJsonAtomic(SYNC_PATH, { passphrase: p });
+  if (sync) sync.start(p);
+  send('info', info());
+  return { ok: true };
+});
+
+ipcMain.on('pause-hotkey', (_e, on) => {
+  hotkeyPaused = !!on;
+  if (hotkeyPaused) { if (hotkey) globalShortcut.unregister(hotkey); hotkey = null; updateTray(); send('info', info()); }
+  else registerHotkey((state && state.preferences.hotkey) || C.DEFAULT_PREFS.hotkey);
+});
 ipcMain.on('minimize', () => mainWindow && mainWindow.minimize());
 ipcMain.on('close', () => mainWindow && mainWindow.hide());
 ipcMain.on('quit', () => app.quit());

@@ -2,7 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
   loadData: () => ipcRenderer.invoke('load-data'),
-  saveData: (data) => ipcRenderer.invoke('save-data', data),
+  saveData: (data, seenSeq) => ipcRenderer.invoke('save-data', data, seenSeq),
   minimize: () => ipcRenderer.send('minimize'),
   close: () => ipcRenderer.send('close'),
   quit: () => ipcRenderer.send('quit'),
@@ -16,5 +16,10 @@ contextBridge.exposeInMainWorld('api', {
   onFlush: (callback) => ipcRenderer.on('flush', () => callback()),
   flushed: () => ipcRenderer.send('flushed'),
   // Records changed by another device: { path → value | null }.
-  onRemotePatch: (callback) => ipcRenderer.on('remote-patch', (_e, patch) => callback(patch))
+  onRemotePatch: (callback) => ipcRenderer.on('remote-patch', (_e, patch, seq, before) => callback(patch, seq, before)),
+  // Settings: sync status and the live hotkey. The passphrase only ever goes in.
+  getInfo: () => ipcRenderer.invoke('get-info'),
+  onInfo: (callback) => ipcRenderer.on('info', (_e, info) => callback(info)),
+  setPassphrase: (p) => ipcRenderer.invoke('set-passphrase', p),
+  pauseHotkey: (on) => ipcRenderer.send('pause-hotkey', on)
 });
