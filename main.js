@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, screen, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const C = require('./core');
@@ -123,11 +123,16 @@ function savedBounds() {
 }
 
 let boundsTimer = null;
+let compactFrom = null; // full-size bounds while the window is shrunk to Today
 function rememberBounds() {
   clearTimeout(boundsTimer);
   boundsTimer = setTimeout(() => {
     if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isMinimized()) {
-      writeJsonAtomic(WINDOW_PATH, mainWindow.getBounds());
+      const b = mainWindow.getBounds();
+      // In compact mode keep the full size on disk, so leaving compact (or a
+      // restart) gets the real window back. Only the position follows.
+      if (compactFrom) { b.width = compactFrom.width; b.height = compactFrom.height; }
+      writeJsonAtomic(WINDOW_PATH, b);
     }
   }, 500);
 }
@@ -163,6 +168,12 @@ function createWindow() {
   });
 
   mainWindow.loadFile('index.html');
+  // Links (a to-do's source) open in the browser, never inside FloatNote.
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  mainWindow.webContents.on('will-navigate', (e) => e.preventDefault());
   mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.on('moved', rememberBounds);
   mainWindow.on('resized', rememberBounds);
@@ -232,3 +243,21 @@ ipcMain.handle('save-data', (_event, data) => { saveState(data); });
 ipcMain.on('minimize', () => mainWindow && mainWindow.minimize());
 ipcMain.on('close', () => mainWindow && mainWindow.hide());
 ipcMain.on('quit', () => app.quit());
+
+// Compact mode: shrink to the height of the Today list, and restore the full
+// size on the way out. The renderer reports the height it needs.
+ipcMain.on('set-compact', (_e, on, height) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const b = mainWindow.getBounds();
+  if (on) {
+    if (!compactFrom) compactFrom = b;
+    const h = Math.max(60, Math.min(Math.round(Number(height) || 0), compactFrom.height));
+    mainWindow.setMinimumSize(200, 60);
+    mainWindow.setBounds({ x: b.x, y: b.y, width: b.width, height: h });
+  } else if (compactFrom) {
+    mainWindow.setMinimumSize(300, 120);
+    mainWindow.setBounds({ x: b.x, y: b.y, width: compactFrom.width, height: compactFrom.height });
+    compactFrom = null;
+    rememberBounds();
+  }
+});

@@ -9,8 +9,7 @@
 
     /* Elastic overscroll */
     .notes-editor,
-    .checklist-items,
-    .dashboard,
+    .todo-scroll,
     .habit-grid,
     .habit-manage-scroll {
       overscroll-behavior-y: contain;
@@ -425,298 +424,224 @@
       padding: 1px 5px; border-radius: 4px; font-size: 12.5px;
     }
 
-    /* Checklist */
-    .checklist-items { flex: 1; overflow-y: auto; padding: 8px 14px; }
+    /* === To-do === */
+    .todo-strip {
+      display: flex; align-items: center; gap: 12px; padding: 7px 14px;
+      background: rgba(15, 15, 26, 0.6); flex-shrink: 0; position: relative; z-index: 10;
+      font-size: 11px; color: var(--text-secondary);
+    }
+    .paperwhite .todo-strip { background: rgba(245, 243, 239, 0.6); }
+    .strip-stat { font-weight: 600; white-space: nowrap; display: inline-block; }
+    .strip-stat .n { color: var(--text-primary); }
+    .strip-stat.pulse { animation: strip-pulse 0.6s ease; }
+    @keyframes strip-pulse {
+      0% { transform: scale(1); }
+      40% { transform: scale(1.18); color: var(--green); }
+      100% { transform: scale(1); }
+    }
+    .ctx-filter {
+      margin-left: auto; display: flex; gap: 2px; padding: 2px;
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 7px;
+    }
+    .ctx-filter button {
+      background: none; border: none; color: var(--text-muted); font-family: inherit;
+      font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 5px; cursor: pointer;
+    }
+    .ctx-filter button:hover { color: var(--text-secondary); }
+    .ctx-filter button.active { background: var(--bg-overlay); color: var(--text-primary); }
+    .ctx-filter button.active[data-ctx="work"] { color: var(--blue); }
+    .ctx-filter button.active[data-ctx="personal"] { color: var(--green); }
 
-    .inline-input {
-      display: flex; align-items: center; gap: 10px; padding: 8px 8px; margin-top: 4px;
+    .capture-row { padding: 4px 14px 0; flex-shrink: 0; position: relative; z-index: 10; }
+    .capture-row input {
+      width: 100%; background: var(--bg-card); border: 1px solid var(--border-light);
+      border-radius: 8px; color: var(--text-primary); font-family: inherit; font-size: 13px;
+      padding: 8px 10px; outline: none; transition: border-color 0.2s;
     }
-    .inline-input .bullet {
-      width: 16px; height: 16px; border: 2px solid var(--text-muted); border-radius: 4px;
-      flex-shrink: 0; opacity: 0.5;
+    .capture-row input:focus { border-color: var(--accent); }
+    .capture-row input::placeholder { color: var(--text-muted); }
+    .capture-hint {
+      padding: 4px 16px 0; font-size: 10px; color: var(--text-muted); flex-shrink: 0;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    .inline-input input {
-      flex: 1; background: transparent; border: none;
-      border-bottom: 1px solid var(--border-light);
-      color: var(--text-primary); font-size: 13px; padding: 6px 0; outline: none;
-      font-family: 'Segoe UI', system-ui, sans-serif; transition: border-color 0.2s;
-    }
-    .inline-input input:focus { border-bottom-color: var(--accent); }
-    .inline-input input::placeholder { color: var(--text-muted); font-style: italic; }
+    .capture-hint:empty { display: none; }
+    .capture-hint b { color: var(--accent); font-weight: 600; }
 
-    .checklist-item {
-      display: flex; align-items: center; gap: 8px; padding: 9px 8px;
-      border-radius: 8px; transition: background 0.15s, opacity 0.2s, transform 0.2s ease;
-      border: 1px solid transparent; position: relative;
+    .todo-scroll { flex: 1; overflow-y: auto; padding: 4px 14px 14px; }
+    .todo-section { margin-top: 10px; }
+    .section-head {
+      display: flex; align-items: center; gap: 6px; padding: 4px 8px; user-select: none;
+      font-size: 10px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase;
+      color: var(--text-muted);
     }
-    .checklist-item.drag-over-above { box-shadow: 0 -2px 0 0 var(--accent); }
-    .checklist-item.drag-over-below { box-shadow: 0 2px 0 0 var(--accent); }
-    .checklist-item.dragging { opacity: 0.3; transform: scale(0.98); }
-    .drag-handle {
-      cursor: grab; color: var(--text-muted); font-size: 11px; opacity: 0;
-      transition: opacity 0.15s; flex-shrink: 0; user-select: none;
-      line-height: 1; width: 14px; text-align: center;
+    .section-head .count { font-weight: 600; letter-spacing: 0.3px; }
+    .section-head .count.full { color: var(--yellow); }
+    .section-head.toggle { cursor: pointer; }
+    .section-head.toggle:hover { color: var(--text-secondary); }
+    .todo-section.today {
+      background: var(--bg-card); border: 1px solid var(--border-light);
+      border-radius: 10px; padding: 4px 4px 6px; margin-top: 8px;
     }
-    .checklist-item:hover .drag-handle { opacity: 0.5; }
-    .drag-handle:active { cursor: grabbing; }
-    .checklist-item:hover {
-      background: var(--bg-card-hover); border-color: var(--border);
+    .todo-section.today > .section-head { color: var(--accent); }
+    .empty-note { font-size: 12px; color: var(--text-muted); padding: 6px 8px; }
+    .link-btn {
+      background: none; border: none; color: var(--accent); font-family: inherit;
+      font-size: 12px; cursor: pointer; padding: 0;
     }
-    .checklist-item input[type="checkbox"] {
-      appearance: none; -webkit-appearance: none;
+    .link-btn:hover { text-decoration: underline; }
+
+    .todo-item {
+      display: flex; align-items: flex-start; gap: 8px; padding: 7px 8px;
+      border-radius: 8px; border: 1px solid transparent; position: relative;
+      transition: background 0.15s, opacity 0.2s; outline: none;
+    }
+    .todo-item:hover, .todo-item:focus-visible { background: var(--bg-card-hover); border-color: var(--border); }
+    .todo-item input[type="checkbox"] {
+      appearance: none; -webkit-appearance: none; margin-top: 1px;
       width: 17px; height: 17px; border: 2px solid var(--text-muted);
       border-radius: 4px; cursor: pointer; flex-shrink: 0;
       transition: background 0.15s, border-color 0.15s; position: relative; background: transparent;
     }
-    .checklist-item input[type="checkbox"]:checked {
-      background: var(--accent); border-color: var(--accent);
-    }
-    .checklist-item input[type="checkbox"]:checked::after {
-      content: '';
-      position: absolute; left: 4px; top: 1px;
-      width: 5px; height: 9px;
-      border: solid white; border-width: 0 2px 2px 0;
+    .todo-item input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); }
+    .todo-item input[type="checkbox"]:checked::after {
+      content: ''; position: absolute; left: 4px; top: 1px;
+      width: 5px; height: 9px; border: solid white; border-width: 0 2px 2px 0;
       transform: rotate(45deg);
     }
-    .checklist-item .item-text { flex: 1; min-width: 0; font-size: 13px; cursor: text; overflow-wrap: break-word; }
-    .checklist-item .item-text:hover { color: var(--accent); }
-    .checklist-item .item-edit-input {
-      flex: 1; font-size: 13px; font-family: inherit;
-      background: var(--bg-surface); border: 1px solid var(--accent);
-      border-radius: 4px; color: var(--text-primary);
+    .ctx-dot {
+      width: 6px; height: 6px; border-radius: 50%; margin-top: 7px; flex-shrink: 0;
+      background: var(--blue); opacity: 0.75; cursor: pointer;
+    }
+    .ctx-dot.personal { background: var(--green); }
+    .ctx-dot:hover { opacity: 1; transform: scale(1.4); }
+    .todo-body { flex: 1; min-width: 0; }
+    .todo-text { font-size: 13px; line-height: 1.4; overflow-wrap: break-word; cursor: text; }
+    .todo-item.done .todo-text { text-decoration: line-through; color: var(--text-muted); }
+    .todo-item.stale .todo-text { color: var(--text-secondary); }
+    .todo-meta { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+    .todo-meta:empty { display: none; }
+    .badge {
+      font-size: 9.5px; padding: 1px 5px; border-radius: 4px; white-space: nowrap;
+      letter-spacing: 0.2px; background: var(--bg-card); color: var(--text-secondary);
+      border: 1px solid var(--border);
+    }
+    .badge.due {
+      background: rgba(255, 209, 128, 0.1); color: var(--yellow);
+      border-color: rgba(255, 209, 128, 0.2); cursor: pointer;
+    }
+    .badge.due.overdue {
+      background: rgba(240, 98, 146, 0.1); color: var(--red); border-color: rgba(240, 98, 146, 0.25);
+    }
+    .badge.who { color: var(--blue); }
+    .badge.carried { color: var(--yellow); }
+    .badge.stale { color: var(--text-muted); }
+    .badge.source {
+      color: var(--accent); text-decoration: none; max-width: 240px;
+      overflow: hidden; text-overflow: ellipsis;
+    }
+    .badge.source:hover { border-color: var(--accent); }
+    .todo-actions {
+      display: none; gap: 3px; align-items: center; position: absolute; right: 6px; top: 5px;
+      padding-left: 8px; background: var(--bg-surface); border-radius: 6px;
+    }
+    .todo-item:hover .todo-actions { display: flex; }
+    .todo-item.suggested .todo-actions { display: flex; position: static; background: none; padding: 0; }
+    .act {
+      background: var(--bg-surface); border: 1px solid var(--border-light); color: var(--text-secondary);
+      font-family: inherit; font-size: 10px; font-weight: 600; padding: 2px 7px;
+      border-radius: 5px; cursor: pointer; line-height: 1.4;
+    }
+    .act:hover:not(:disabled) { color: var(--text-primary); border-color: var(--accent); }
+    .act:disabled { opacity: 0.35; cursor: default; }
+    .act.del:hover { color: var(--red) !important; border-color: var(--red) !important; }
+    .act.keep { color: var(--accent); border-color: var(--accent); }
+    .todo-edit {
+      width: 100%; font-family: inherit; font-size: 13px; background: var(--bg-surface);
+      border: 1px solid var(--accent); border-radius: 4px; color: var(--text-primary);
       padding: 2px 6px; outline: none;
     }
-    .checklist-item.checked .item-text { text-decoration: line-through; color: var(--text-muted); }
-    .checklist-item .delete-btn {
-      background: none; border: none; color: var(--text-muted); cursor: pointer;
-      font-size: 16px; padding: 0 4px; opacity: 0; transition: opacity 0.15s;
-    }
-    .checklist-item:hover .delete-btn { opacity: 1; }
-    .checklist-item .delete-btn:hover { color: var(--red); }
 
-    /* Priority background tint */
-    .checklist-item.priority-high { background: rgba(192, 80, 78, 0.1); border-color: rgba(192, 80, 78, 0.15); }
-    .checklist-item.priority-medium { background: rgba(196, 160, 72, 0.1); border-color: rgba(196, 160, 72, 0.15); }
-    .checklist-item.priority-low { background: rgba(82, 139, 185, 0.1); border-color: rgba(82, 139, 185, 0.15); }
-
-    /* Priority flag button */
-    .priority-btn {
-      background: none; border: none; cursor: pointer;
-      font-size: 12px; padding: 0 2px; flex-shrink: 0;
-      color: var(--text-muted); opacity: 0.2; transition: opacity 0.15s, color 0.15s;
-      line-height: 1; font-family: inherit;
+    /* Triage card */
+    .card {
+      background: var(--bg-card); border: 1px solid rgba(255, 209, 128, 0.25);
+      border-radius: 10px; padding: 10px 12px; margin-top: 10px;
     }
-    .checklist-item:hover .priority-btn { opacity: 0.6; }
-    .priority-btn.p-high { color: var(--red); opacity: 1 !important; }
-    .priority-btn.p-medium { color: var(--yellow); opacity: 1 !important; }
-    .priority-btn.p-low { color: var(--blue); opacity: 1 !important; }
-
-    /* Date badge (shown on hover) */
-    .item-date-badge {
-      font-size: 9.5px; color: var(--text-muted); opacity: 0;
-      transition: opacity 0.15s; white-space: nowrap; flex-shrink: 0;
-      letter-spacing: 0.2px;
+    .card-title {
+      display: flex; align-items: center; gap: 8px; font-size: 10px; font-weight: 700;
+      letter-spacing: 0.6px; text-transform: uppercase; color: var(--yellow);
     }
-    .checklist-item:hover .item-date-badge { opacity: 0.65; }
-
-    /* Clean list toolbar */
-    .checklist-toolbar {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 4px 14px 0; flex-shrink: 0;
+    .card-title .card-sub { text-transform: none; letter-spacing: 0; font-weight: 500; }
+    .card-x {
+      margin-left: auto; background: none; border: none; color: var(--text-muted);
+      font-size: 15px; line-height: 1; cursor: pointer; padding: 0 2px;
     }
-    .clean-btn {
-      padding: 3px 10px; font-size: 10px; font-weight: 600; letter-spacing: 0.3px;
-      border: 1px solid var(--border-light); border-radius: 6px; background: transparent;
-      color: var(--text-muted); cursor: pointer; transition: background 0.15s, color 0.15s, border-color 0.15s; font-family: inherit;
+    .card-x:hover { color: var(--text-primary); }
+    .card-text { font-size: 13px; margin: 6px 0 8px; overflow-wrap: break-word; line-height: 1.4; }
+    .card-sub { font-size: 10px; color: var(--text-muted); }
+    .card-btns { display: flex; gap: 6px; }
+    .card-btn {
+      flex: 1; padding: 6px; font-family: inherit; font-size: 11px; font-weight: 600;
+      border-radius: 7px; border: 1px solid var(--border-light); background: transparent;
+      color: var(--text-secondary); cursor: pointer; white-space: nowrap;
     }
-    .clean-btn:hover {
-      color: var(--red); border-color: rgba(240, 98, 146, 0.4);
-      background: rgba(240, 98, 146, 0.08);
+    .card-btn:hover { background: var(--bg-card-hover); color: var(--text-primary); }
+    .card-btn.primary { border-color: var(--accent); color: var(--accent); }
+    .card-btn.danger:hover { color: var(--red); border-color: var(--red); }
+    .card-btn kbd {
+      font-family: inherit; font-size: 9px; opacity: 0.6; margin-left: 5px;
+      border: 1px solid var(--border-light); border-radius: 3px; padding: 0 3px;
     }
 
-    /* Sort select */
-    .sort-select {
-      padding: 3px 8px; font-size: 10px; font-weight: 600; letter-spacing: 0.3px;
-      border: 1px solid var(--border-light); border-radius: 6px;
-      background: transparent; color: var(--text-muted); cursor: pointer;
-      transition: color 0.15s; font-family: inherit; outline: none;
-      appearance: none; -webkit-appearance: none;
+    /* Morning pick */
+    .pick-overlay {
+      position: fixed; inset: 0; z-index: 900; background: rgba(10, 10, 20, 0.8);
+      display: flex; align-items: center; justify-content: center; padding: 14px;
     }
-    .sort-select:hover { color: var(--text-secondary); }
-    .sort-select option { background: var(--bg-surface); color: var(--text-primary); }
+    .paperwhite .pick-overlay { background: rgba(245, 243, 239, 0.88); }
+    .pick-overlay.hidden { display: none; }
+    .pick-card {
+      background: var(--bg-surface); border: 1px solid var(--border-light); border-radius: 14px;
+      width: 100%; max-width: 420px; max-height: 100%; display: flex; flex-direction: column;
+      padding: 16px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+    }
+    .pick-title { font-size: 14px; font-weight: 700; }
+    .pick-sub { font-size: 11px; color: var(--text-muted); margin: 3px 0 12px; }
+    .pick-card .card-text { font-size: 14px; margin: 0 0 6px; }
+    .pick-card .todo-meta { margin: 0 0 14px; }
+    .pick-list { overflow-y: auto; flex: 1; min-height: 0; margin: 0 -4px 12px; }
+    .pick-row {
+      display: flex; align-items: flex-start; gap: 8px; padding: 7px 8px; border-radius: 8px;
+      cursor: pointer; font-size: 13px; border: 1px solid transparent;
+    }
+    .pick-row:hover { background: var(--bg-card-hover); }
+    .pick-row.on { background: var(--accent-glow); border-color: var(--accent); }
+    .pick-row.off { opacity: 0.35; cursor: default; }
+    .pick-row .num { font-size: 10px; color: var(--text-muted); width: 10px; text-align: right; flex-shrink: 0; margin-top: 2px; }
+    .pick-row .t { flex: 1; min-width: 0; overflow-wrap: break-word; line-height: 1.4; }
+    .pick-foot { text-align: center; margin-top: 10px; }
 
-    /* Deadline button */
-    .deadline-btn {
-      background: none; border: none; cursor: pointer;
-      font-size: 11px; padding: 0 2px; flex-shrink: 0;
-      opacity: 0; transition: opacity 0.15s; line-height: 1; font-family: inherit;
-      color: var(--text-muted);
+    /* Toast */
+    .toast {
+      position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 950;
+      background: var(--bg-overlay); border: 1px solid var(--border-light); border-radius: 8px;
+      padding: 7px 12px; font-size: 12px; display: flex; gap: 12px; align-items: center;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35); max-width: calc(100% - 28px);
     }
-    .checklist-item:hover .deadline-btn { opacity: 0.5; }
-    .deadline-btn.has-deadline { opacity: 1 !important; color: var(--yellow); }
-    .deadline-btn.overdue { opacity: 1 !important; color: var(--red); }
-
-    /* Deadline badge */
-    .deadline-badge {
-      font-size: 9.5px; white-space: nowrap; flex-shrink: 0; letter-spacing: 0.2px;
-      padding: 1px 5px; border-radius: 4px;
-      background: rgba(255, 209, 128, 0.1); color: var(--yellow);
-      border: 1px solid rgba(255, 209, 128, 0.2);
-    }
-    .deadline-badge.overdue {
-      background: rgba(240, 98, 146, 0.1); color: var(--red);
-      border-color: rgba(240, 98, 146, 0.25);
-    }
-
-    /* Dashboard */
-
-    /* Stoic Quote */
-    .quote-card {
-      background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, transparent), rgba(91, 156, 245, 0.05));
-      border: 1px solid color-mix(in srgb, var(--accent) 12%, transparent);
-      border-radius: 12px;
-      padding: 16px 18px;
-      position: relative;
-      overflow: hidden;
-      cursor: pointer;
-      transition: border-color 0.2s;
-    }
-    .quote-card:hover { border-color: color-mix(in srgb, var(--accent) 25%, transparent); }
-    .quote-card::before {
-      content: '\201C';
-      position: absolute;
-      top: -4px; left: 10px;
-      font-size: 52px;
-      font-family: Georgia, 'Times New Roman', serif;
-      color: color-mix(in srgb, var(--accent) 12%, transparent);
-      pointer-events: none;
-      line-height: 1;
-    }
-    .quote-text {
-      font-family: Georgia, 'Times New Roman', serif;
-      font-style: italic;
-      font-size: 13.5px;
-      line-height: 1.6;
-      color: var(--text-primary);
-      margin-bottom: 8px;
-      padding-left: 4px;
-      transition: opacity 0.35s;
-    }
-    .quote-text.fading { opacity: 0; }
-    .quote-author {
-      font-size: 10.5px;
-      font-weight: 600;
-      color: var(--accent);
-      letter-spacing: 0.8px;
-      text-transform: uppercase;
-      text-align: right;
-      transition: opacity 0.35s;
-    }
-    .quote-author.fading { opacity: 0; }
-    .quote-hint {
-      position: absolute;
-      bottom: 6px; left: 18px;
-      font-size: 9px;
-      color: var(--text-muted);
-      opacity: 0;
-      transition: opacity 0.2s;
-    }
-    .quote-card:hover .quote-hint { opacity: 1; }
-
-    /* Stats */
-    .stat-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 14px;
-      text-align: center;
-      transition: background 0.2s, border-color 0.2s, transform 0.2s;
-      position: relative;
-      overflow: hidden;
-    }
-    .stat-card::before {
-      content: '';
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      height: 2px;
-      opacity: 0;
-      transition: opacity 0.2s;
-      background: linear-gradient(90deg, transparent, var(--accent), transparent);
-    }
-    .stat-card:hover::before { opacity: 1; }
-    .stat-card:hover {
-      background: var(--bg-card-hover);
-      border-color: var(--border-light);
-      transform: translateY(-1px);
-    }
-    .stat-icon { font-size: 18px; margin-bottom: 2px; }
-    .stat-value {
-      font-size: 26px; font-weight: 700;
-      background: linear-gradient(135deg, var(--accent), #d4a8ff);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      line-height: 1.2;
-    }
-    .stat-label {
-      font-size: 10px; color: var(--text-muted); margin-top: 3px;
-      text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500;
-    }
-    .stat-value.blue {
-      background: linear-gradient(135deg, var(--blue), #82b5f7);
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-    }
-    .stat-value.green {
-      background: linear-gradient(135deg, var(--green), #9ae8c0);
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-    }
-    .stat-value.yellow {
-      background: linear-gradient(135deg, var(--yellow), #ffe0a0);
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    .toast.hidden { display: none; }
+    .toast span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .toast button {
+      background: none; border: none; color: var(--accent); font-family: inherit;
+      font-size: 12px; font-weight: 700; cursor: pointer; flex-shrink: 0;
     }
 
-    /* Chart */
-    .chart-container {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 14px;
-    }
-    .chart-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 10px;
-    }
-    .chart-title {
-      font-size: 11px; font-weight: 600; color: var(--text-secondary);
-      text-transform: uppercase; letter-spacing: 0.5px;
-    }
-    .chart-toggle {
-      display: flex; gap: 4px;
-    }
-    .chart-toggle-btn {
-      padding: 3px 10px;
-      font-size: 10px;
-      font-weight: 600;
-      letter-spacing: 0.3px;
-      border: 1px solid var(--border-light);
-      border-radius: 6px;
-      background: transparent;
-      color: var(--text-muted);
-      cursor: pointer;
-      transition: background 0.15s, color 0.15s, border-color 0.15s;
-      font-family: inherit;
-    }
-    .chart-toggle-btn.active {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: #fff;
-    }
-    .chart-toggle-btn:hover:not(.active) {
-      color: var(--text-secondary);
-      background: var(--bg-card-hover);
-    }
-    canvas { width: 100% !important; }
+    /* Compact: only Today stays on screen */
+    .btn-compact { background: var(--green); }
+    body.compact .tabs, body.compact .todo-strip, body.compact .capture-row,
+    body.compact .capture-hint, body.compact .todo-scroll > :not(#sec-today),
+    body.compact .panel:not(#panel-todo) { display: none; }
+    body.compact #panel-todo { display: flex; }
+    body.compact .todo-scroll { padding: 4px 8px 6px; overflow-y: auto; }
+    body.compact #sec-today { margin-top: 0; border: none; background: none; padding: 0; }
 
     /* Scrollbar */
     ::-webkit-scrollbar { width: 5px; }
@@ -967,30 +892,6 @@
       padding: 1px 5px; flex-shrink: 0; white-space: nowrap;
     }
 
-    /* XP bar */
-    .habit-xp-section {
-      margin-top: 12px; padding: 10px; background: var(--bg-card);
-      border: 1px solid var(--border); border-radius: 10px;
-    }
-    .habit-xp-header {
-      display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;
-    }
-    .habit-xp-level {
-      font-size: 12px; font-weight: 700;
-      background: linear-gradient(135deg, var(--accent), var(--blue));
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-    }
-    .habit-xp-text {
-      font-size: 10px; color: var(--text-muted); font-weight: 500;
-    }
-    .habit-xp-track {
-      height: 10px; background: var(--bg-overlay); border-radius: 5px; overflow: hidden;
-    }
-    .habit-xp-fill {
-      height: 100%; border-radius: 5px; transition: width 0.4s ease;
-      background: linear-gradient(90deg, var(--accent), var(--blue));
-    }
-
     /* Weekly completion ring (SVG) */
     .habit-ring-container {
       display: flex; align-items: center; justify-content: center;
@@ -1040,85 +941,6 @@
     }
     .habit-stat-card.at-risk .habit-stat-label { color: var(--red); }
 
-    /* === Configurable Dashboard === */
-    .dashboard {
-      flex: 1; overflow-y: auto; padding: 14px;
-      position: relative;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      align-content: start;
-      grid-auto-rows: min-content;
-    }
-    .dashboard-config-btn {
-      position: sticky; top: 0; grid-column: 1 / -1; justify-self: end;
-      z-index: 5; background: none; border: 1px solid var(--border-light);
-      border-radius: 6px; color: var(--text-muted); cursor: pointer;
-      font-size: 14px; padding: 3px 7px;
-      transition: color 0.15s, border-color 0.15s, background 0.15s;
-      font-family: inherit; line-height: 1; margin-bottom: -4px;
-    }
-    .dashboard-config-btn:hover {
-      color: var(--text-primary); border-color: var(--accent);
-      background: rgba(180, 142, 255, 0.08);
-    }
-    .dashboard-config-panel {
-      position: fixed; z-index: 100;
-      background: var(--bg-surface); border: 1px solid var(--border-light);
-      border-radius: 10px; width: 260px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-      display: flex; flex-direction: column;
-      max-height: 70vh;
-    }
-    .dashboard-config-panel.hidden { display: none; }
-    .dashboard-config-title {
-      font-size: 11px; font-weight: 600; color: var(--text-secondary);
-      text-transform: uppercase; letter-spacing: 0.5px;
-      padding: 12px 14px 8px; flex-shrink: 0;
-    }
-    .dashboard-config-list {
-      display: flex; flex-direction: column; gap: 2px;
-      overflow-y: auto; padding: 0 14px; flex: 1; min-height: 0;
-    }
-    .dashboard-config-item {
-      display: flex; align-items: center; gap: 8px; padding: 5px 6px;
-      border-radius: 6px; cursor: pointer; transition: background 0.15s;
-      font-size: 12px; color: var(--text-primary); user-select: none;
-      flex-shrink: 0;
-    }
-    .dashboard-config-item:hover { background: var(--bg-card-hover); }
-    .dashboard-config-item input[type="checkbox"] {
-      appearance: none; -webkit-appearance: none;
-      width: 15px; height: 15px; border: 2px solid var(--text-muted);
-      border-radius: 4px; cursor: pointer; flex-shrink: 0;
-      transition: background 0.15s, border-color 0.15s; position: relative; background: transparent;
-    }
-    .dashboard-config-item input[type="checkbox"]:checked {
-      background: var(--accent); border-color: var(--accent);
-    }
-    .dashboard-config-item input[type="checkbox"]:checked::after {
-      content: ''; position: absolute; left: 3px; top: 0px;
-      width: 5px; height: 9px; border: solid white; border-width: 0 2px 2px 0;
-      transform: rotate(45deg);
-    }
-    .dashboard-config-item .cfg-icon { font-size: 13px; flex-shrink: 0; width: 18px; text-align: center; }
-    .dashboard-config-item .cfg-label { flex: 1; }
-    .dashboard-config-done {
-      width: calc(100% - 28px); padding: 7px; margin: 10px 14px 12px;
-      background: var(--accent); border: none; border-radius: 6px;
-      color: #fff; font-size: 11px; font-weight: 600; cursor: pointer;
-      transition: opacity 0.2s; font-family: inherit; flex-shrink: 0;
-    }
-    .dashboard-config-done:hover { opacity: 0.85; }
-
-    .dashboard-widget-full { grid-column: 1 / -1; }
-
-    .dashboard-widget { cursor: grab; }
-    .dashboard-widget > .stat-card { height: 100%; }
-    .dashboard-widget:active { cursor: grabbing; }
-    .dashboard-widget.dragging { opacity: 0.4; }
-    .dashboard-widget.drag-over-top { border-top: 2px solid var(--accent); }
-    .dashboard-widget.drag-over-bottom { border-bottom: 2px solid var(--accent); }
   </style>
 </head>
 <body>
@@ -1149,30 +971,35 @@
   <div class="titlebar">
     <span class="titlebar-title">FloatNote</span>
     <div class="titlebar-buttons">
+      <button class="titlebar-btn btn-compact" id="btn-compact" title="Compact: Today only"></button>
       <button class="titlebar-btn btn-minimize" id="btn-min"></button>
       <button class="titlebar-btn btn-close" id="btn-close"></button>
     </div>
   </div>
 
   <div class="tabs">
-    <div class="tab active" data-tab="dashboard">Dashboard</div>
+    <div class="tab active" data-tab="todo">To-do</div>
     <div class="tab" data-tab="notes">Notes</div>
-    <div class="tab" data-tab="checklist">Checklist</div>
     <div class="tab" data-tab="habits">Habits</div>
     <button class="theme-toggle" id="theme-toggle" title="Toggle paperwhite theme"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
   </div>
 
-  <!-- Dashboard -->
-  <div class="panel active" id="panel-dashboard">
-    <div class="dashboard" id="dashboard-container">
-      <button class="dashboard-config-btn" id="dashboard-config-btn" title="Configure dashboard">&#x2699;</button>
-      <!-- widgets rendered dynamically -->
+  <!-- To-do -->
+  <div class="panel active" id="panel-todo">
+    <div class="todo-strip">
+      <span class="strip-stat" id="strip-done"></span>
+      <span class="strip-stat" id="strip-streak"></span>
+      <div class="ctx-filter" id="ctx-filter">
+        <button data-ctx="">All</button>
+        <button data-ctx="work">Work</button>
+        <button data-ctx="personal">Personal</button>
+      </div>
     </div>
-    <div class="dashboard-config-panel hidden" id="dashboard-config-panel">
-      <div class="dashboard-config-title">Configure Dashboard</div>
-      <div class="dashboard-config-list" id="dashboard-config-list"></div>
-      <button class="dashboard-config-done" id="dashboard-config-done">Done</button>
+    <div class="capture-row">
+      <input type="text" id="capture-input" placeholder="Add a to-do" autocomplete="off" spellcheck="false">
     </div>
+    <div class="capture-hint" id="capture-hint"></div>
+    <div class="todo-scroll" id="todo-scroll"></div>
   </div>
 
   <!-- Notes -->
@@ -1202,24 +1029,6 @@
       <div class="notes-context-menu-sep"></div>
       <div class="notes-context-menu-item" data-action="code">Inline Code<span class="shortcut">`text`</span></div>
     </div>
-  </div>
-
-  <!-- Checklist -->
-  <div class="panel" id="panel-checklist">
-    <div class="category-bar">
-      <button class="cat-btn active-pro" data-cat="professional" id="cl-cat-pro">Professional</button>
-      <button class="cat-btn" data-cat="personal" id="cl-cat-per">Personal</button>
-    </div>
-    <div class="checklist-toolbar">
-      <select class="sort-select" id="sort-select">
-        <option value="none">&#x21F5; Sort</option>
-        <option value="newest">Newest first</option>
-        <option value="oldest">Oldest first</option>
-        <option value="priority">Priority</option>
-      </select>
-      <button class="clean-btn" id="clean-btn">Clean list</button>
-    </div>
-    <div class="checklist-items" id="checklist-items"></div>
   </div>
 
   <!-- Habits -->
@@ -1262,101 +1071,13 @@
     </div>
   </div>
 
+  <!-- Morning pick -->
+  <div class="pick-overlay hidden" id="pick-overlay"><div class="pick-card" id="pick-card"></div></div>
+
+  <div class="toast hidden" id="toast"></div>
+
+  <script src="core.js"></script>
   <script>
-    // --- Stoic Quotes ---
-    const STOIC_QUOTES = [
-      { text: "We suffer more often in imagination than in reality.", author: "Seneca" },
-      { text: "The happiness of your life depends upon the quality of your thoughts.", author: "Marcus Aurelius" },
-      { text: "Man is not worried by real problems so much as by his imagined anxieties about real problems.", author: "Epictetus" },
-      { text: "Waste no more time arguing about what a good man should be. Be one.", author: "Marcus Aurelius" },
-      { text: "He who fears death will never do anything worthy of a man who is alive.", author: "Seneca" },
-      { text: "It is not that we have a short time to live, but that we waste a great deal of it.", author: "Seneca" },
-      { text: "You have power over your mind, not outside events. Realize this, and you will find strength.", author: "Marcus Aurelius" },
-      { text: "First say to yourself what you would be; and then do what you have to do.", author: "Epictetus" },
-      { text: "The best revenge is not to be like your enemy.", author: "Marcus Aurelius" },
-      { text: "Difficulties strengthen the mind, as labor does the body.", author: "Seneca" },
-      { text: "No man is free who is not master of himself.", author: "Epictetus" },
-      { text: "If it is not right, do not do it; if it is not true, do not say it.", author: "Marcus Aurelius" },
-      { text: "We are more often frightened than hurt; and we suffer more from imagination than from reality.", author: "Seneca" },
-      { text: "How long are you going to wait before you demand the best for yourself?", author: "Epictetus" },
-      { text: "The soul becomes dyed with the colour of its thoughts.", author: "Marcus Aurelius" },
-      { text: "True happiness is to enjoy the present, without anxious dependence upon the future.", author: "Seneca" },
-      { text: "Make the best use of what is in your power, and take the rest as it happens.", author: "Epictetus" },
-      { text: "Very little is needed to make a happy life; it is all within yourself, in your way of thinking.", author: "Marcus Aurelius" },
-      { text: "Luck is what happens when preparation meets opportunity.", author: "Seneca" },
-      { text: "It's not what happens to you, but how you react to it that matters.", author: "Epictetus" },
-      { text: "Never let the future disturb you. You will meet it, if you have to, with the same weapons of reason which today arm you against the present.", author: "Marcus Aurelius" },
-      { text: "A gem cannot be polished without friction, nor a man perfected without trials.", author: "Seneca" },
-      { text: "Wealth consists not in having great possessions, but in having few wants.", author: "Epictetus" },
-      { text: "The impediment to action advances action. What stands in the way becomes the way.", author: "Marcus Aurelius" },
-      { text: "Begin at once to live, and count each separate day as a separate life.", author: "Seneca" },
-      { text: "Don't explain your philosophy. Embody it.", author: "Epictetus" },
-      { text: "When you arise in the morning, think of what a precious privilege it is to be alive.", author: "Marcus Aurelius" },
-      { text: "As is a tale, so is life: not how long it is, but how good it is, is what matters.", author: "Seneca" },
-      { text: "Only the educated are free.", author: "Epictetus" },
-      { text: "Dwell on the beauty of life. Watch the stars, and see yourself running with them.", author: "Marcus Aurelius" },
-      { text: "Every new beginning comes from some other beginning's end.", author: "Seneca" },
-      { text: "He is a wise man who does not grieve for the things which he has not, but rejoices for those which he has.", author: "Epictetus" },
-      { text: "Accept the things to which fate binds you, and love the people with whom fate brings you together.", author: "Marcus Aurelius" },
-      { text: "Sometimes even to live is an act of courage.", author: "Seneca" },
-      { text: "There is only one way to happiness and that is to cease worrying about things which are beyond the power of our will.", author: "Epictetus" },
-      { text: "The object of life is not to be on the side of the majority, but to escape finding oneself in the ranks of the insane.", author: "Marcus Aurelius" },
-      // Nietzsche
-      { text: "Without music, life would be a mistake.", author: "Nietzsche" },
-      { text: "That which does not kill us makes us stronger.", author: "Nietzsche" },
-      { text: "He who has a why to live can bear almost any how.", author: "Nietzsche" },
-      { text: "One must still have chaos in oneself to be able to give birth to a dancing star.", author: "Nietzsche" },
-      { text: "The higher we soar, the smaller we appear to those who cannot fly.", author: "Nietzsche" },
-      { text: "Become who you are.", author: "Nietzsche" },
-      { text: "The secret for harvesting from existence the greatest fruitfulness and the greatest enjoyment is to live dangerously.", author: "Nietzsche" },
-      // Kierkegaard
-      { text: "Life can only be understood backwards; but it must be lived forwards.", author: "Kierkegaard" },
-      { text: "The most common form of despair is not being who you are.", author: "Kierkegaard" },
-      { text: "Anxiety is the dizziness of freedom.", author: "Kierkegaard" },
-      { text: "To dare is to lose one's footing momentarily. Not to dare is to lose oneself.", author: "Kierkegaard" },
-      { text: "Once you label me you negate me.", author: "Kierkegaard" },
-      { text: "The highest and most beautiful things in life are not to be heard about, nor read about, nor seen, but, if one will, are to be lived.", author: "Kierkegaard" },
-      // Sartre
-      { text: "We are condemned to be free.", author: "Sartre" },
-      { text: "Man is nothing else but what he makes of himself.", author: "Sartre" },
-      { text: "Freedom is what you do with what has been done to you.", author: "Sartre" },
-      { text: "Everything has been figured out, except how to live.", author: "Sartre" },
-      { text: "Existence precedes essence.", author: "Sartre" },
-      { text: "Words are loaded pistols.", author: "Sartre" },
-    ];
-
-    let currentQuoteIndex = -1;
-
-    function getRandomQuote() {
-      let idx;
-      do {
-        idx = Math.floor(Math.random() * STOIC_QUOTES.length);
-      } while (idx === currentQuoteIndex && STOIC_QUOTES.length > 1);
-      currentQuoteIndex = idx;
-      return STOIC_QUOTES[idx];
-    }
-
-    function showQuote(animate) {
-      const textEl = document.getElementById('quote-text');
-      const authorEl = document.getElementById('quote-author');
-      if (!textEl || !authorEl) return;
-      if (animate) {
-        textEl.classList.add('fading');
-        authorEl.classList.add('fading');
-        setTimeout(() => {
-          const q = getRandomQuote();
-          textEl.textContent = q.text;
-          authorEl.textContent = '\u2014 ' + q.author;
-          textEl.classList.remove('fading');
-          authorEl.classList.remove('fading');
-        }, 350);
-      } else {
-        const q = getRandomQuote();
-        textEl.textContent = q.text;
-        authorEl.textContent = '\u2014 ' + q.author;
-      }
-    }
-
     // --- Colour themes ---
     const COLOUR_MAP = {
       purple: { accent: '#b48eff', glow: 'rgba(180, 142, 255, 0.25)' },
@@ -1388,24 +1109,12 @@
     }
 
     // --- State ---
-    let state = {
-      notes: { professional: '', personal: '' },
-      _notesLastEdit: { professional: 0, personal: 0 },
-      checklist: { professional: [], personal: [] },
-      _deletedChecklist: [],
-      completionLog: [],
-      preferences: null,
-      habits: [],
-      _deletedHabits: [],
-      habitLog: {},
-      dashboardConfig: null
-    };
+    const FN = window.FNCore;
+    let state = FN.emptyState();
+    let loaded = false;
     let saveTimeout = null;
     let activeNotesCategory = 'professional';
-    let activeChecklistCategory = 'professional';
-    let chartMode = 'daily'; // 'daily' or 'cumulative'
-    let checklistSort = 'none'; // 'none' | 'newest' | 'oldest' | 'priority'
-    let activeHabitView = 'tracker'; // 'tracker' | 'manage'
+    let activeHabitView = 'tracker';
     let habitWeekOffset = 0; // 0 = current week, -1 = last week, etc.
 
     // --- Custom undo/redo stack for DOM transformations ---
@@ -1430,7 +1139,6 @@
       const prev = undoStack.pop();
       editor.innerHTML = prev;
       state.notes[activeNotesCategory] = prev;
-      state._notesLastEdit[activeNotesCategory] = Date.now();
       scheduleSave();
       return true;
     }
@@ -1442,26 +1150,16 @@
       const next = redoStack.pop();
       editor.innerHTML = next;
       state.notes[activeNotesCategory] = next;
-      state._notesLastEdit[activeNotesCategory] = Date.now();
       scheduleSave();
       return true;
     }
 
     // --- Persistence ---
     async function load() {
-      const loaded = await window.api.loadData();
-      state.notes = loaded.notes || { professional: '', personal: '' };
-      state._notesLastEdit = loaded._notesLastEdit || { professional: 0, personal: 0 };
-      state.checklist = loaded.checklist || { professional: [], personal: [] };
-      state._deletedChecklist = loaded._deletedChecklist || [];
-      state.completionLog = loaded.completionLog || [];
-      state.preferences = loaded.preferences || null;
-      state.habits = loaded.habits || [];
-      state._deletedHabits = loaded._deletedHabits || [];
-      state.habitLog = loaded.habitLog || {};
-      state.dashboardConfig = loaded.dashboardConfig || null;
+      state = FN.normalizeState(await window.api.loadData());
+      ctxFilter = FN.CTXS.includes(state.preferences.ctxFilter) ? state.preferences.ctxFilter : '';
 
-      if (state.preferences) {
+      if (state.preferences.name) {
         applyPreferences(state.preferences);
       } else {
         document.getElementById('onboarding').classList.remove('hidden');
@@ -1476,11 +1174,16 @@
       });
 
       document.getElementById('notes-editor').innerHTML = state.notes[activeNotesCategory] || '';
-      renderChecklist();
-      renderDashboard();
+      loaded = true;
+      if (state.preferences.compact) document.body.classList.add('compact');
+      renderTodo();
+      checkDay(true);
     }
 
+    // Nothing is saved until load() has finished: saving the empty initial
+    // state would overwrite the real file.
     function scheduleSave() {
+      if (!loaded) return;
       clearTimeout(saveTimeout);
       saveTimeout = setTimeout(() => window.api.saveData(state), 300);
     }
@@ -1500,16 +1203,13 @@
     // --- Tabs ---
     const _allTabs = document.querySelectorAll('.tab');
     const _allPanels = document.querySelectorAll('.panel');
-    _allTabs.forEach(tab => {
-      tab.addEventListener('click', () => {
-        _allTabs.forEach(t => t.classList.remove('active'));
-        _allPanels.forEach(p => p.classList.remove('active'));
-        tab.classList.add('active');
-        document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
-        if (tab.dataset.tab === 'dashboard') renderDashboard();
-        if (tab.dataset.tab === 'habits') renderActiveHabitView();
-      });
-    });
+    function showTab(name) {
+      _allTabs.forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+      _allPanels.forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
+      if (name === 'todo') renderTodo();
+      if (name === 'habits') renderActiveHabitView();
+    }
+    _allTabs.forEach(tab => tab.addEventListener('click', () => showTab(tab.dataset.tab)));
 
     // --- Theme toggle ---
     document.getElementById('theme-toggle').addEventListener('click', () => {
@@ -1743,7 +1443,6 @@
         }
       }
       state.notes[activeNotesCategory] = editor.innerHTML;
-      state._notesLastEdit[activeNotesCategory] = Date.now();
       scheduleSave();
     });
 
@@ -2552,903 +2251,632 @@
       }
     });
 
-    // --- Checklist category toggle ---
-    function setChecklistCategory(cat) {
-      activeChecklistCategory = cat;
-      document.getElementById('cl-cat-pro').className = 'cat-btn' + (cat === 'professional' ? ' active-pro' : '');
-      document.getElementById('cl-cat-per').className = 'cat-btn' + (cat === 'personal' ? ' active-per' : '');
-      renderChecklist();
+    // --- To-do ---
+    // Four lists (Today / Next / Waiting / Later). The rules live in core.js
+    // (FN); this section only draws them and turns clicks into those calls.
+    let ctxFilter = '';          // '' = all, else 'work' | 'personal' (a local preference)
+    let laterOpen = false;
+    let triageOn = false;        // once started, triage runs until no stale item is left
+    let triageDismissed = '';    // the day the triage card was closed with ×
+    let editingId = null;
+
+    const SHORT_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    function todayCap() {
+      const n = Math.round(Number(state.preferences.todayCap));
+      return Number.isFinite(n) ? Math.min(5, Math.max(1, n)) : 3;
     }
-    document.getElementById('cl-cat-pro').addEventListener('click', () => setChecklistCategory('professional'));
-    document.getElementById('cl-cat-per').addEventListener('click', () => setChecklistCategory('personal'));
+    function todayFull() { return FN.openCount(state, 'today') >= todayCap(); }
 
-    // --- Checklist ---
-    const PRIORITY_CYCLE = ['none', 'high', 'medium', 'low'];
-    const PRIORITY_ORDER = { high: 0, medium: 1, low: 2, none: 3 };
+    function ordinal(n) {
+      const s = ['th', 'st', 'nd', 'rd'], v = n % 100;
+      return n + (s[(v - 20) % 10] || s[v] || s[0]);
+    }
 
-    function getSortedItems(items) {
-      const indexed = items.map((item, i) => ({ item, originalIndex: i }));
-      if (checklistSort === 'oldest') {
-        indexed.sort((a, b) => {
-          if (!a.item.addedAt && !b.item.addedAt) return 0;
-          if (!a.item.addedAt) return 1;
-          if (!b.item.addedAt) return -1;
-          return a.item.addedAt.localeCompare(b.item.addedAt);
-        });
-      } else if (checklistSort === 'newest') {
-        indexed.sort((a, b) => {
-          if (!a.item.addedAt && !b.item.addedAt) return 0;
-          if (!a.item.addedAt) return 1;
-          if (!b.item.addedAt) return -1;
-          return b.item.addedAt.localeCompare(a.item.addedAt);
-        });
-      } else if (checklistSort === 'priority') {
-        indexed.sort((a, b) => PRIORITY_ORDER[a.item.priority || 'none'] - PRIORITY_ORDER[b.item.priority || 'none']);
+    function dueLabel(due, today) {
+      const diff = FN.daysBetween(today, due);
+      if (diff < 0) return (-diff) + 'd overdue';
+      if (diff === 0) return 'today';
+      if (diff === 1) return 'tomorrow';
+      const d = FN.parseDateStr(due);
+      if (diff < 7) return SHORT_DAYS[d.getDay()];
+      return d.getDate() + ' ' + SHORT_MONTHS[d.getMonth()] + (d.getFullYear() !== new Date().getFullYear() ? ' ' + d.getFullYear() : '');
+    }
+
+    function daysSince(t, now) { return Math.max(0, Math.floor((now - t) / FN.DAY_MS)); }
+
+    function trunc(s, n) { return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+
+    // #p / #w typed explicitly; parseCapture cannot tell "#w" from the default.
+    function explicitCtx(raw) {
+      const m = String(raw).match(/(?:^|\s)#(p|personal|w|work)(?=\s|$)/i);
+      return m ? (m[1][0].toLowerCase() === 'p' ? 'personal' : 'work') : null;
+    }
+
+    function sourceHtml(src) {
+      if (!src || typeof src.url !== 'string' || !/^https?:\/\//i.test(src.url)) return '';
+      return '<a class="badge source" href="' + escapeHtml(src.url) + '" target="_blank" rel="noopener" title="' +
+        escapeHtml(src.url) + '">' + escapeHtml(src.label || src.url) + '</a>';
+    }
+
+    function metaHtml(item, today, now) {
+      const done = FN.isDone(item);
+      let m = '';
+      if (item.due && !done) {
+        m += '<span class="badge due' + (item.due < today ? ' overdue' : '') + '" data-act="due" title="Change or clear the due date">' +
+          dueLabel(item.due, today) + '</span>';
       }
-      return indexed;
-    }
-
-    function formatDeadline(dateStr) {
-      if (!dateStr) return '';
-      const d = new Date(dateStr + 'T00:00:00');
-      return 'Due ' + d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    }
-
-    function isOverdue(dateStr) {
-      if (!dateStr) return false;
-      return dateStr < todayStr();
-    }
-
-    function formatAddedDate(dateStr) {
-      if (!dateStr) return 'Date unknown';
-      const d = new Date(dateStr + 'T00:00:00');
-      return 'Added ' + d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    }
-
-    function getAllChecklistItems() {
-      return [...(state.checklist.professional || []), ...(state.checklist.personal || [])];
-    }
-
-    // Shared singleton date picker for checklist deadlines
-    let _sharedDatePicker = null;
-    let _datePickerTarget = null;
-    function getSharedDatePicker() {
-      if (_sharedDatePicker) return _sharedDatePicker;
-      _sharedDatePicker = document.createElement('input');
-      _sharedDatePicker.type = 'date';
-      _sharedDatePicker.style.cssText = 'position:fixed;top:-200px;left:-200px;opacity:0;width:0;height:0;border:0;padding:0;';
-      _sharedDatePicker.addEventListener('change', () => {
-        if (!_datePickerTarget) return;
-        const { cat, index } = _datePickerTarget;
-        const val = _sharedDatePicker.value || undefined;
-        if (val) state.checklist[cat][index].deadline = val;
-        else delete state.checklist[cat][index].deadline;
-        state.checklist[cat][index].updatedAt = Date.now();
-        _datePickerTarget = null;
-        if (_sharedDatePicker.parentNode) _sharedDatePicker.parentNode.removeChild(_sharedDatePicker);
-        scheduleSave();
-        renderChecklist();
-      });
-      return _sharedDatePicker;
-    }
-
-    function renderChecklist(scrollToBottom) {
-      const cat = activeChecklistCategory;
-      const items = state.checklist[cat] || [];
-      const container = document.getElementById('checklist-items');
-      container.innerHTML = '';
-
-      getSortedItems(items).forEach(({ item, originalIndex: i }) => {
-        const priority = item.priority || 'none';
-        const div = document.createElement('div');
-        div.className = 'checklist-item' + (item.done ? ' checked' : '') + (priority !== 'none' ? ' priority-' + priority : '');
-
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.checked = item.done;
-        cb.addEventListener('change', () => {
-          const wasDone = state.checklist[cat][i].done;
-          state.checklist[cat][i].done = cb.checked;
-          state.checklist[cat][i].doneAt = Date.now();
-          if (cb.checked && !wasDone) {
-            state.completionLog.push({ date: todayStr(), category: cat });
-          } else if (!cb.checked && wasDone) {
-            for (let j = state.completionLog.length - 1; j >= 0; j--) {
-              if (state.completionLog[j].category === cat) {
-                state.completionLog.splice(j, 1);
-                break;
-              }
-            }
-          }
-          scheduleSave();
-          renderChecklist();
-        });
-
-        const span = document.createElement('span');
-        span.className = 'item-text';
-        span.textContent = item.text;
-        span.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const editInput = document.createElement('input');
-          editInput.type = 'text';
-          editInput.className = 'item-edit-input';
-          editInput.value = item.text;
-          span.replaceWith(editInput);
-          editInput.focus();
-          editInput.select();
-          const commit = () => {
-            const newText = editInput.value.trim();
-            if (newText && newText !== item.text) {
-              state.checklist[cat][i].text = newText;
-              scheduleSave();
-            }
-            renderChecklist();
-          };
-          editInput.addEventListener('blur', commit);
-          editInput.addEventListener('keydown', (ke) => {
-            if (ke.key === 'Enter') { ke.preventDefault(); editInput.blur(); }
-            if (ke.key === 'Escape') { editInput.value = item.text; editInput.blur(); }
-          });
-        });
-
-        const dateBadge = document.createElement('span');
-        dateBadge.className = 'item-date-badge';
-        dateBadge.textContent = formatAddedDate(item.addedAt);
-
-        const dlOverdue = item.deadline && isOverdue(item.deadline);
-        const deadlineBtn = document.createElement('button');
-        deadlineBtn.className = 'deadline-btn' + (item.deadline ? (dlOverdue ? ' overdue' : ' has-deadline') : '');
-        deadlineBtn.textContent = '\uD83D\uDCC5';
-        deadlineBtn.title = item.deadline ? 'Change deadline' : 'Set deadline';
-        deadlineBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const picker = getSharedDatePicker();
-          picker.value = item.deadline || '';
-          _datePickerTarget = { cat, index: i };
-          if (!picker.parentNode) document.body.appendChild(picker);
-          if (picker.showPicker) picker.showPicker();
-          else picker.click();
-        });
-
-        const priorityBtn = document.createElement('button');
-        priorityBtn.className = 'priority-btn' + (priority !== 'none' ? ' p-' + priority : '');
-        priorityBtn.textContent = '\u2691';
-        const priorityLabels = { none: 'Set priority', high: 'High priority', medium: 'Medium priority', low: 'Low priority' };
-        priorityBtn.title = priorityLabels[priority];
-        priorityBtn.addEventListener('click', () => {
-          const cur = state.checklist[cat][i].priority || 'none';
-          state.checklist[cat][i].priority = PRIORITY_CYCLE[(PRIORITY_CYCLE.indexOf(cur) + 1) % PRIORITY_CYCLE.length];
-          state.checklist[cat][i].updatedAt = Date.now();
-          scheduleSave();
-          renderChecklist();
-        });
-
-        const del = document.createElement('button');
-        del.className = 'delete-btn';
-        del.textContent = '\u00d7';
-        del.addEventListener('click', () => {
-          const deleted = state.checklist[cat][i];
-          const key = deleted.text + '|' + (deleted.addedAt || '');
-          state._deletedChecklist.push(key);
-          state.checklist[cat].splice(i, 1);
-          scheduleSave();
-          renderChecklist();
-        });
-
-        const handle = document.createElement('span');
-        handle.className = 'drag-handle';
-        handle.textContent = '\u2630';
-        if (checklistSort === 'none') handle.setAttribute('draggable', 'true');
-        else handle.style.display = 'none';
-
-        div.appendChild(handle);
-        div.appendChild(cb);
-        div.appendChild(span);
-        if (item.deadline) {
-          const dlBadge = document.createElement('span');
-          dlBadge.className = 'deadline-badge' + (dlOverdue ? ' overdue' : '');
-          dlBadge.textContent = formatDeadline(item.deadline);
-          div.appendChild(dlBadge);
-        }
-        div.appendChild(dateBadge);
-        div.appendChild(deadlineBtn);
-        div.appendChild(priorityBtn);
-        div.appendChild(del);
-        div.dataset.origIdx = i;
-        container.appendChild(div);
-      });
-
-      // Checklist drag-and-drop reorder
-      let _clDragIdx = null;
-      container.querySelectorAll('.checklist-item').forEach(row => {
-        const handle = row.querySelector('.drag-handle');
-        if (!handle) return;
-        handle.addEventListener('dragstart', (e) => {
-          _clDragIdx = parseInt(row.dataset.origIdx);
-          row.classList.add('dragging');
-          e.dataTransfer.effectAllowed = 'move';
-          e.dataTransfer.setData('text/plain', _clDragIdx);
-        });
-        handle.addEventListener('dragend', () => {
-          row.classList.remove('dragging');
-          container.querySelectorAll('.checklist-item').forEach(r => {
-            r.classList.remove('drag-over-above', 'drag-over-below');
-          });
-          _clDragIdx = null;
-        });
-        row.addEventListener('dragover', (e) => {
-          if (_clDragIdx === null) return;
-          e.preventDefault();
-          e.dataTransfer.dropEffect = 'move';
-          const rect = row.getBoundingClientRect();
-          const mid = rect.top + rect.height / 2;
-          row.classList.remove('drag-over-above', 'drag-over-below');
-          row.classList.add(e.clientY < mid ? 'drag-over-above' : 'drag-over-below');
-        });
-        row.addEventListener('dragleave', () => {
-          row.classList.remove('drag-over-above', 'drag-over-below');
-        });
-        row.addEventListener('drop', (e) => {
-          e.preventDefault();
-          row.classList.remove('drag-over-above', 'drag-over-below');
-          const fromIdx = parseInt(e.dataTransfer.getData('text/plain'));
-          const toIdx = parseInt(row.dataset.origIdx);
-          if (isNaN(fromIdx) || isNaN(toIdx) || fromIdx === toIdx) return;
-          const rect = row.getBoundingClientRect();
-          const mid = rect.top + rect.height / 2;
-          const arr = state.checklist[cat];
-          const [moved] = arr.splice(fromIdx, 1);
-          let insertAt = e.clientY < mid ? toIdx : toIdx + 1;
-          if (fromIdx < toIdx) insertAt--;
-          arr.splice(Math.max(0, insertAt), 0, moved);
-          scheduleSave();
-          renderChecklist();
-        });
-      });
-
-      const inputRow = document.createElement('div');
-      inputRow.className = 'inline-input';
-
-      const bullet = document.createElement('div');
-      bullet.className = 'bullet';
-
-      const input = document.createElement('input');
-      input.type = 'text';
-      input.placeholder = 'Type a task and press Enter...';
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          const text = input.value.trim();
-          if (!text) return;
-          if (!state.checklist[cat]) state.checklist[cat] = [];
-          state.checklist[cat].push({ text, done: false, priority: 'none', addedAt: todayStr() });
-          scheduleSave();
-          renderChecklist(true);
-          setTimeout(() => {
-            const newInput = container.querySelector('.inline-input input');
-            if (newInput) newInput.focus();
-          }, 0);
-        }
-      });
-
-      inputRow.appendChild(bullet);
-      inputRow.appendChild(input);
-      container.appendChild(inputRow);
-      if (scrollToBottom) container.scrollTop = container.scrollHeight;
-    }
-
-    // --- Clean list ---
-    function cleanChecklist() {
-      const cat = activeChecklistCategory;
-      const items = state.checklist[cat] || [];
-      const before = items.length;
-      items.filter(item => item.done).forEach(item => {
-        state._deletedChecklist.push(item.text + '|' + (item.addedAt || ''));
-      });
-      state.checklist[cat] = items.filter(item => !item.done);
-      if (state.checklist[cat].length < before) {
-        scheduleSave();
-        renderChecklist();
+      if (item.list === 'waiting') {
+        const since = FN.daysBetween(FN.dateStr(item.listAt || item.createdAt), today);
+        m += '<span class="badge who" title="Waiting since ' + FN.dateStr(item.listAt || item.createdAt) + '">' +
+          escapeHtml(item.who || 'someone') + ' · ' + since + 'd</span>';
+      } else if (item.who) {
+        m += '<span class="badge who">@' + escapeHtml(item.who) + '</span>';
       }
-    }
-    document.getElementById('clean-btn').addEventListener('click', cleanChecklist);
-
-    document.getElementById('sort-select').addEventListener('change', (e) => {
-      checklistSort = e.target.value;
-      renderChecklist();
-    });
-
-    // Delegated click handlers for dynamically rendered dashboard elements
-    document.addEventListener('click', (e) => {
-      if (e.target.closest('#quote-card')) { showQuote(true); return; }
-      if (e.target.id === 'chart-daily') {
-        if (chartMode === 'daily') return;
-        chartMode = 'daily';
-        e.target.classList.add('active');
-        const cum = document.getElementById('chart-cumulative');
-        if (cum) cum.classList.remove('active');
-        renderChart(state.completionLog || []);
-      } else if (e.target.id === 'chart-cumulative') {
-        if (chartMode === 'cumulative') return;
-        chartMode = 'cumulative';
-        e.target.classList.add('active');
-        const daily = document.getElementById('chart-daily');
-        if (daily) daily.classList.remove('active');
-        renderChart(state.completionLog || []);
+      if (item.list === 'today' && !done && item.carriedDays > 0) {
+        m += '<span class="badge carried" title="Carried over from earlier days">' + ordinal(item.carriedDays + 1) + ' day</span>';
       }
-    });
+      if (FN.isStale(item, now)) {
+        m += '<span class="badge stale" title="Untouched for this many days">' + daysSince(item.touchedAt || item.createdAt, now) + 'd</span>';
+      }
+      m += sourceHtml(item.source);
+      return m;
+    }
 
-    // --- Dashboard Widget Registry ---
-    const DEFAULT_WIDGETS = ['quote', 'stat-completed', 'stat-pending', 'stat-pro', 'stat-per', 'chart-productivity'];
-
-    const DASHBOARD_WIDGETS = [
-      { id: 'stat-completed', label: 'Total Completed', type: 'stat', icon: '\uD83C\uDFAF',
-        render: (el) => {
-          const v = (state.completionLog || []).length;
-          el.innerHTML = '<div class="stat-icon">\uD83C\uDFAF</div><div class="stat-value">' + v + '</div><div class="stat-label">Completed</div>';
+    function itemHtml(item, today, now) {
+      const done = FN.isDone(item);
+      const cls = 'todo-item' + (done ? ' done' : '') + (FN.isStale(item, now) ? ' stale' : '');
+      const acts = [];
+      if (!done) {
+        if (item.list !== 'today') {
+          const full = todayFull();
+          acts.push('<button class="act" data-act="move" data-to="today"' + (full ? ' disabled title="Today is full"' : '') + '>Today</button>');
         }
-      },
-      { id: 'stat-pending', label: 'Open Tasks', type: 'stat', icon: '\uD83D\uDCCB',
-        render: (el) => {
-          const v = (state.checklist.professional || []).filter(i => !i.done).length + (state.checklist.personal || []).filter(i => !i.done).length;
-          el.innerHTML = '<div class="stat-icon">\uD83D\uDCCB</div><div class="stat-value yellow">' + v + '</div><div class="stat-label">Open Tasks</div>';
-        }
-      },
-      { id: 'stat-pro', label: 'Professional', type: 'stat', icon: '\uD83D\uDCBC',
-        render: (el) => {
-          const v = (state.completionLog || []).filter(e => e.category === 'professional').length;
-          el.innerHTML = '<div class="stat-icon">\uD83D\uDCBC</div><div class="stat-value blue">' + v + '</div><div class="stat-label">Professional</div>';
-        }
-      },
-      { id: 'stat-per', label: 'Personal', type: 'stat', icon: '\uD83C\uDF31',
-        render: (el) => {
-          const v = (state.completionLog || []).filter(e => e.category === 'personal').length;
-          el.innerHTML = '<div class="stat-icon">\uD83C\uDF31</div><div class="stat-value green">' + v + '</div><div class="stat-label">Personal</div>';
-        }
-      },
-      { id: 'stat-high', label: 'High Priority', type: 'stat', icon: '\uD83D\uDD34',
-        render: (el) => {
-          const all = getAllChecklistItems();
-          const v = all.filter(i => !i.done && i.priority === 'high').length;
-          el.innerHTML = '<div class="stat-icon">\uD83D\uDD34</div><div class="stat-value" style="background:linear-gradient(135deg,var(--red),#f48fb1);-webkit-background-clip:text;-webkit-text-fill-color:transparent">' + v + '</div><div class="stat-label">High Priority</div>';
-        }
-      },
-      { id: 'stat-medium', label: 'Medium Priority', type: 'stat', icon: '\uD83D\uDFE1',
-        render: (el) => {
-          const all = getAllChecklistItems();
-          const v = all.filter(i => !i.done && i.priority === 'medium').length;
-          el.innerHTML = '<div class="stat-icon">\uD83D\uDFE1</div><div class="stat-value yellow">' + v + '</div><div class="stat-label">Medium Priority</div>';
-        }
-      },
-      { id: 'stat-low', label: 'Low Priority', type: 'stat', icon: '\uD83D\uDD35',
-        render: (el) => {
-          const all = getAllChecklistItems();
-          const v = all.filter(i => !i.done && i.priority === 'low').length;
-          el.innerHTML = '<div class="stat-icon">\uD83D\uDD35</div><div class="stat-value blue">' + v + '</div><div class="stat-label">Low Priority</div>';
-        }
-      },
-      { id: 'stat-today', label: 'Completed Today', type: 'stat', icon: '\u2705',
-        render: (el) => {
-          const today = todayStr();
-          const v = (state.completionLog || []).filter(e => e.date === today).length;
-          el.innerHTML = '<div class="stat-icon">\u2705</div><div class="stat-value green">' + v + '</div><div class="stat-label">Done Today</div>';
-        }
-      },
-      { id: 'stat-overdue', label: 'Overdue Tasks', type: 'stat', icon: '\u23F0',
-        render: (el) => {
-          const today = todayStr();
-          const all = getAllChecklistItems();
-          const v = all.filter(i => !i.done && i.deadline && i.deadline < today).length;
-          el.innerHTML = '<div class="stat-icon">\u23F0</div><div class="stat-value" style="background:linear-gradient(135deg,var(--red),#f48fb1);-webkit-background-clip:text;-webkit-text-fill-color:transparent">' + v + '</div><div class="stat-label">Overdue</div>';
-        }
-      },
-      { id: 'stat-streak', label: 'Habit Day Streak', type: 'stat', icon: '\uD83D\uDD25',
-        render: (el) => {
-          const v = getDayStreak();
-          el.innerHTML = '<div class="stat-icon">\uD83D\uDD25</div><div class="stat-value">' + v + '</div><div class="stat-label">Day Streak</div>';
-        }
-      },
-      { id: 'stat-habits-today', label: 'Habits Done Today', type: 'stat', icon: '\uD83D\uDDD3',
-        render: (el) => {
-          const today = todayStr();
-          const dow = new Date().getDay();
-          const dayOfWeek = dow === 0 ? 6 : dow - 1;
-          const active = (state.habits || []).filter(h => !h.archived);
-          let done = 0, total = 0;
-          active.forEach(h => {
-            if (isHabitScheduled(h, dayOfWeek)) {
-              total++;
-              if (state.habitLog[h.id + ':' + today]) done++;
-            }
-          });
-          el.innerHTML = '<div class="stat-icon">\uD83D\uDDD3</div><div class="stat-value green">' + done + '/' + total + '</div><div class="stat-label">Habits Today</div>';
-        }
-      },
-      { id: 'stat-habits-active', label: 'Active Habits', type: 'stat', icon: '\uD83D\uDCAA',
-        render: (el) => {
-          const v = (state.habits || []).filter(h => !h.archived).length;
-          el.innerHTML = '<div class="stat-icon">\uD83D\uDCAA</div><div class="stat-value blue">' + v + '</div><div class="stat-label">Active Habits</div>';
-        }
-      },
-      { id: 'stat-best-habit', label: 'Best Habit Streak', type: 'stat', icon: '\uD83C\uDFC6',
-        render: (el) => {
-          const active = (state.habits || []).filter(h => !h.archived);
-          let best = 0;
-          active.forEach(h => { const s = getHabitStreak(h.id); if (s > best) best = s; });
-          el.innerHTML = '<div class="stat-icon">\uD83C\uDFC6</div><div class="stat-value">' + best + '</div><div class="stat-label">Best Streak</div>';
-        }
-      },
-      { id: 'stat-week-pct', label: 'Week Habit %', type: 'stat', icon: '\uD83D\uDCC8',
-        render: (el) => {
-          const weekDays = getWeekDays(0);
-          const active = (state.habits || []).filter(h => !h.archived);
-          let completed = 0, scheduled = 0;
-          active.forEach(h => {
-            const wc = getWeeklyCompletion(h.id, weekDays);
-            completed += wc.completed;
-            scheduled += wc.scheduled;
-          });
-          const pct = scheduled > 0 ? Math.round((completed / scheduled) * 100) : 0;
-          el.innerHTML = '<div class="stat-icon">\uD83D\uDCC8</div><div class="stat-value green">' + pct + '%</div><div class="stat-label">This Week</div>';
-        }
-      },
-      { id: 'stat-xp', label: 'XP Level', type: 'stat', icon: '\u2B50',
-        render: (el) => {
-          const xp = getXPLevel();
-          el.innerHTML = '<div class="stat-icon">\u2B50</div><div class="stat-value blue">Lv ' + xp.level + '</div><div class="stat-label">' + xp.xpInLevel + '/' + xp.xpNeeded + ' XP</div>';
-        }
-      },
-      { id: 'stat-avg-daily', label: 'Avg Tasks/Day', type: 'stat', icon: '\uD83D\uDCC9',
-        render: (el) => {
-          const cutoff = new Date();
-          cutoff.setDate(cutoff.getDate() - 13);
-          const cutoffStr = toDateStr(cutoff);
-          let count = 0;
-          (state.completionLog || []).forEach(e => { if (e.date >= cutoffStr) count++; });
-          const avg = (count / 14).toFixed(1);
-          el.innerHTML = '<div class="stat-icon">\uD83D\uDCC9</div><div class="stat-value">' + avg + '</div><div class="stat-label">Avg/Day (14d)</div>';
-        }
-      },
-      { id: 'quote', label: 'Stoic Quote', type: 'full', icon: '\uD83D\uDCDC',
-        render: (el) => {
-          const q = getRandomQuote();
-          el.innerHTML = '<div class="quote-card" id="quote-card" title="Click for a new quote"><div class="quote-text" id="quote-text">' + escapeHtml(q.text) + '</div><div class="quote-author" id="quote-author">\u2014 ' + escapeHtml(q.author) + '</div><div class="quote-hint">click for another</div></div>';
-        }
-      },
-      { id: 'chart-productivity', label: 'Productivity Chart', type: 'full', icon: '\uD83D\uDCCA',
-        render: (el) => {
-          el.innerHTML = '<div class="chart-container"><div class="chart-header"><div class="chart-title">Productivity</div><div class="chart-toggle"><button class="chart-toggle-btn' + (chartMode === 'daily' ? ' active' : '') + '" id="chart-daily">Daily</button><button class="chart-toggle-btn' + (chartMode === 'cumulative' ? ' active' : '') + '" id="chart-cumulative">Cumulative</button></div></div><canvas id="chart" height="180"></canvas></div>';
-          setTimeout(() => renderChart(state.completionLog || []), 0);
-        }
-      },
-      { id: 'chart-heatmap', label: '28-Day Heatmap', type: 'full', icon: '\uD83D\uDFE9',
-        render: (el) => {
-          const activeHabits = (state.habits || []).filter(h => !h.archived);
-          if (!activeHabits.length) { el.innerHTML = '<div class="chart-container" style="text-align:center;padding:20px;color:var(--text-muted);font-size:12px">No active habits for heatmap</div>'; return; }
-          el.innerHTML = '<div class="chart-container"><div class="chart-title" style="margin-bottom:8px">28-Day Heatmap</div>' + buildHeatmapHtml(activeHabits) + '</div>';
-        }
-      },
-      { id: 'chart-habit-bars', label: 'Habit Completion Bars', type: 'full', icon: '\uD83D\uDCCA',
-        render: (el) => {
-          const activeHabits = (state.habits || []).filter(h => !h.archived);
-          if (!activeHabits.length) { el.innerHTML = '<div class="chart-container" style="text-align:center;padding:20px;color:var(--text-muted);font-size:12px">No active habits for bars</div>'; return; }
-          let html = '<div class="chart-container"><div class="chart-title" style="margin-bottom:8px">Avg Weekly Completion</div>';
-          activeHabits.forEach(h => {
-            const pct = getAvgWeeklyCompletion(h.id);
-            const streak = getHabitStreak(h.id);
-            const emoji = getHabitEmoji(h.name);
-            html += '<div class="habit-bar-row"><span class="habit-bar-label" title="' + escapeHtml(h.name) + '">' + emoji + ' ' + escapeHtml(h.name) + '</span><div class="habit-bar-track"><div class="habit-bar-fill" style="width:' + pct + '%"></div></div><span class="habit-bar-pct">' + pct + '%</span><span class="habit-bar-streak">\uD83D\uDD25 ' + streak + '</span></div>';
-          });
-          html += '</div>';
-          el.innerHTML = html;
+        if (item.list !== 'next') acts.push('<button class="act" data-act="move" data-to="next">Next</button>');
+        if (item.list === 'next') {
+          acts.push('<button class="act" data-act="move" data-to="waiting" title="Waiting on someone">Wait</button>');
+          acts.push('<button class="act" data-act="move" data-to="later">Later</button>');
         }
       }
-    ];
-
-    function getWidgetById(id) {
-      return DASHBOARD_WIDGETS.find(w => w.id === id);
+      acts.push('<button class="act del" data-act="drop" title="Drop">×</button>');
+      return '<div class="' + cls + '" data-id="' + escapeHtml(item.id) + '">' +
+        '<input type="checkbox" data-act="tick"' + (done ? ' checked' : '') + '>' +
+        '<span class="ctx-dot' + (item.ctx === 'personal' ? ' personal' : '') + '" data-act="ctx" title="' +
+          (item.ctx === 'personal' ? 'Personal' : 'Work') + ' (click to switch)"></span>' +
+        '<div class="todo-body"><div class="todo-text" data-act="edit">' + escapeHtml(item.text) + '</div>' +
+          '<div class="todo-meta">' + metaHtml(item, today, now) + '</div></div>' +
+        '<div class="todo-actions">' + acts.join('') + '</div>' +
+      '</div>';
     }
 
-    function getActiveWidgets() {
-      if (state.dashboardConfig && state.dashboardConfig.widgets) {
-        return state.dashboardConfig.widgets;
-      }
-      return DEFAULT_WIDGETS;
+    function suggestedHtml(item, today, now) {
+      return '<div class="todo-item suggested" tabindex="0" data-id="' + escapeHtml(item.id) + '">' +
+        '<span class="ctx-dot' + (item.ctx === 'personal' ? ' personal' : '') + '" data-act="ctx" title="' +
+          (item.ctx === 'personal' ? 'Personal' : 'Work') + ' (click to switch)"></span>' +
+        '<div class="todo-body"><div class="todo-text" data-act="edit">' + escapeHtml(item.text) + '</div>' +
+          '<div class="todo-meta">' + (item.list === 'waiting' ? '<span class="badge">Waiting</span>' : '') +
+          metaHtml(item, today, now) + '</div></div>' +
+        '<div class="todo-actions"><button class="act keep" data-act="keep" title="Keep (Enter)">Keep</button>' +
+          '<button class="act del" data-act="drop" title="Drop (Delete)">×</button></div>' +
+      '</div>';
     }
 
-    // --- Dashboard ---
-    function renderDashboard() {
-      const container = document.getElementById('dashboard-container');
-      // Remove old widgets, preserve config btn + panel
-      container.querySelectorAll('.dashboard-widget').forEach(el => el.remove());
-
-      const widgetIds = getActiveWidgets();
-
-      widgetIds.forEach(id => {
-        const w = getWidgetById(id);
-        if (!w) return;
-
-        if (w.type === 'stat') {
-          const wrapper = document.createElement('div');
-          wrapper.className = 'dashboard-widget';
-          wrapper.setAttribute('draggable', 'true');
-          wrapper.dataset.widgetId = id;
-          const card = document.createElement('div');
-          card.className = 'stat-card';
-          w.render(card);
-          wrapper.appendChild(card);
-          container.appendChild(wrapper);
-        } else {
-          const wrapper = document.createElement('div');
-          wrapper.className = 'dashboard-widget dashboard-widget-full';
-          wrapper.setAttribute('draggable', 'true');
-          wrapper.dataset.widgetId = id;
-          w.render(wrapper);
-          container.appendChild(wrapper);
-        }
-      });
-
-      // Attach drag-and-drop
-      attachDashboardDragDrop();
+    function triageState(now) {
+      const today = FN.dateStr(now);
+      const stale = FN.staleItems(state, now);
+      if (!triageOn && stale.length >= FN.TRIAGE_THRESHOLD) triageOn = true;
+      if (!stale.length) triageOn = false;
+      if (!triageOn || triageDismissed === today) return null;
+      return { item: stale[0], left: stale.length };
     }
 
-    // --- Dashboard drag-and-drop ---
-    let dashDragSource = null;
-
-    function attachDashboardDragDrop() {
-      const container = document.getElementById('dashboard-container');
-      const widgets = container.querySelectorAll('.dashboard-widget');
-
-      widgets.forEach(widget => {
-        widget.addEventListener('dragstart', (e) => {
-          dashDragSource = widget;
-          widget.classList.add('dragging');
-          e.dataTransfer.effectAllowed = 'move';
-          e.dataTransfer.setData('text/plain', 'dashboard-widget');
-        });
-
-        widget.addEventListener('dragend', () => {
-          widget.classList.remove('dragging');
-          dashDragSource = null;
-          // Clear all drag-over classes
-          container.querySelectorAll('.drag-over-top, .drag-over-bottom').forEach(el => {
-            el.classList.remove('drag-over-top', 'drag-over-bottom');
-          });
-        });
-
-        widget.addEventListener('dragover', (e) => {
-          if (!dashDragSource || dashDragSource === widget) return;
-          const data = e.dataTransfer.types.includes('text/plain');
-          if (!data) return;
-          e.preventDefault();
-          e.dataTransfer.dropEffect = 'move';
-          const rect = widget.getBoundingClientRect();
-          const midY = rect.top + rect.height / 2;
-          widget.classList.remove('drag-over-top', 'drag-over-bottom');
-          if (e.clientY < midY) {
-            widget.classList.add('drag-over-top');
-          } else {
-            widget.classList.add('drag-over-bottom');
-          }
-        });
-
-        widget.addEventListener('dragleave', () => {
-          widget.classList.remove('drag-over-top', 'drag-over-bottom');
-        });
-
-        widget.addEventListener('drop', (e) => {
-          e.preventDefault();
-          if (!dashDragSource || dashDragSource === widget) return;
-          widget.classList.remove('drag-over-top', 'drag-over-bottom');
-
-          const widgetIds = getActiveWidgets().slice();
-          const srcId = dashDragSource.dataset.widgetId;
-          const tgtId = widget.dataset.widgetId;
-
-          // Remove source from array
-          const srcIdx = widgetIds.indexOf(srcId);
-          if (srcIdx === -1) return;
-          widgetIds.splice(srcIdx, 1);
-
-          // Find insertion point
-          const rect = widget.getBoundingClientRect();
-          const midY = rect.top + rect.height / 2;
-          const insertBefore = e.clientY < midY;
-
-          const tgtIdx = widgetIds.indexOf(tgtId);
-          const insertIdx = insertBefore ? tgtIdx : tgtIdx + 1;
-
-          widgetIds.splice(insertIdx, 0, srcId);
-
-          if (!state.dashboardConfig) state.dashboardConfig = {};
-          state.dashboardConfig.widgets = widgetIds;
-          scheduleSave();
-          renderDashboard();
-        });
-      });
+    function triageHtml(now) {
+      const t = triageState(now);
+      if (!t) return '';
+      return '<div class="card triage" data-id="' + escapeHtml(t.item.id) + '">' +
+        '<div class="card-title">Still doing this? <span class="card-sub">' + t.left + ' stale</span>' +
+          '<button class="card-x" data-act="triage-close" title="Not today">×</button></div>' +
+        '<div class="card-text">' + escapeHtml(t.item.text) + '</div>' +
+        '<div class="card-sub" style="margin:-4px 0 8px">Untouched for ' + daysSince(t.item.touchedAt || t.item.createdAt, now) + ' days</div>' +
+        '<div class="card-btns">' +
+          '<button class="card-btn primary" data-act="triage-keep">Keep<kbd>K</kbd></button>' +
+          '<button class="card-btn" data-act="triage-later">Later<kbd>L</kbd></button>' +
+          '<button class="card-btn danger" data-act="triage-drop">Drop<kbd>D</kbd></button>' +
+        '</div></div>';
     }
 
-    // --- Dashboard Config Panel ---
-    function openDashboardConfig() {
-      const panel = document.getElementById('dashboard-config-panel');
-      const list = document.getElementById('dashboard-config-list');
-      const activeIds = getActiveWidgets();
+    function renderStrip(today) {
+      const done = FN.doneOn(state, today);
+      const st = FN.streak(state, today);
+      document.getElementById('strip-done').innerHTML = '✓ <span class="n">' + done + '</span> done today';
+      document.getElementById('strip-streak').innerHTML = st ? '🔥 <span class="n">' + st + '</span>-day streak' : '';
+      document.querySelectorAll('#ctx-filter button').forEach(b => b.classList.toggle('active', b.dataset.ctx === ctxFilter));
+    }
+
+    function renderTodo() {
+      if (!loaded || editingId) return;
+      const now = Date.now();
+      const today = FN.dateStr(now);
+      const ctx = ctxFilter || undefined;
+      renderStrip(today);
 
       let html = '';
-      DASHBOARD_WIDGETS.forEach(w => {
-        const checked = activeIds.includes(w.id) ? ' checked' : '';
-        html += '<label class="dashboard-config-item"><input type="checkbox" data-widget-id="' + w.id + '"' + checked + '><span class="cfg-icon">' + w.icon + '</span><span class="cfg-label">' + w.label + '</span></label>';
+      const open = FN.openCount(state, 'today');
+      const cap = todayCap();
+      const todayItems = FN.listItems(state, 'today', { today, ctx });
+      html += '<div class="todo-section today" id="sec-today"><div class="section-head">Today <span class="count' +
+        (open >= cap ? ' full' : '') + '">' + open + '/' + cap + '</span></div>';
+      if (todayItems.length) html += todayItems.map(i => itemHtml(i, today, now)).join('');
+      else if (open) html += '<div class="empty-note">Nothing here for this filter.</div>';
+      else html += '<div class="empty-note">Nothing on Today. <button class="link-btn" data-act="open-pick">Pick from Next</button></div>';
+      html += '</div>';
+
+      const sugg = Object.values(state.items)
+        .filter(i => i.suggested && !FN.isDone(i) && (!ctx || i.ctx === ctx))
+        .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+      if (sugg.length) {
+        html += '<div class="todo-section"><div class="section-head">Suggested <span class="count">' + sugg.length + '</span></div>' +
+          sugg.map(i => suggestedHtml(i, today, now)).join('') + '</div>';
+      }
+
+      html += triageHtml(now);
+
+      const next = FN.listItems(state, 'next', { today, ctx, suggested: false });
+      html += '<div class="todo-section"><div class="section-head">Next <span class="count">' +
+        next.filter(i => !FN.isDone(i)).length + '</span></div>';
+      html += next.length ? next.map(i => itemHtml(i, today, now)).join('')
+        : '<div class="empty-note">Nothing in Next. Type above to add.</div>';
+      html += '</div>';
+
+      const waiting = FN.listItems(state, 'waiting', { today, ctx, suggested: false });
+      if (waiting.length) {
+        html += '<div class="todo-section"><div class="section-head">Waiting <span class="count">' +
+          waiting.filter(i => !FN.isDone(i)).length + '</span></div>' + waiting.map(i => itemHtml(i, today, now)).join('') + '</div>';
+      }
+
+      const later = FN.listItems(state, 'later', { today, ctx });
+      if (later.length) {
+        html += '<div class="todo-section"><div class="section-head toggle" data-act="toggle-later">' +
+          (laterOpen ? '▾' : '▸') + ' Later <span class="count">' + later.filter(i => !FN.isDone(i)).length + '</span></div>' +
+          (laterOpen ? later.map(i => itemHtml(i, today, now)).join('') : '') + '</div>';
+      }
+
+      const scroll = document.getElementById('todo-scroll');
+      const top = scroll.scrollTop;
+      scroll.innerHTML = html;
+      scroll.scrollTop = top;
+      fitCompact();
+    }
+
+    // --- To-do: changes ---
+    function changed() { scheduleSave(); renderTodo(); }
+
+    function moveTo(id, list) {
+      const item = state.items[id];
+      if (!item) return;
+      if (list === 'today' && item.list !== 'today' && todayFull()) {
+        toast('Today is full (' + todayCap() + '). Finish or move one out first.');
+        return;
+      }
+      FN.moveItem(item, list, Date.now());
+      changed();
+    }
+
+    function setDone(id, done) {
+      if (done) FN.completeItem(state, id, Date.now());
+      else FN.uncompleteItem(state, id, Date.now());
+      changed();
+      if (done) {
+        const el = document.getElementById('strip-done');
+        el.classList.remove('pulse');
+        void el.offsetWidth;
+        el.classList.add('pulse');
+      }
+    }
+
+    function dropItem(id) {
+      const item = state.items[id];
+      if (!item) return;
+      const copy = FN.clone(item);
+      delete state.items[id];
+      changed();
+      toast('Dropped “' + trunc(copy.text, 40) + '”', () => {
+        state.items[copy.id] = copy;
+        changed();
+        if (pick) renderPick();
       });
-      list.innerHTML = html;
-      panel.classList.remove('hidden');
     }
 
-    function closeDashboardConfig() {
-      document.getElementById('dashboard-config-panel').classList.add('hidden');
-      scheduleSave();
-      renderDashboard();
+    function keepSuggestion(id) {
+      const item = state.items[id];
+      if (!item) return;
+      delete item.suggested;
+      item.touchedAt = Date.now();
+      changed();
     }
 
-    // Delegated handler for dashboard config checkboxes
-    document.getElementById('dashboard-config-list').addEventListener('change', (e) => {
-      const cb = e.target;
-      if (cb.type !== 'checkbox' || !cb.dataset.widgetId) return;
-      const id = cb.dataset.widgetId;
-      let widgets = getActiveWidgets().slice();
-      if (cb.checked) {
-        if (!widgets.includes(id)) widgets.push(id);
-      } else {
-        widgets = widgets.filter(wid => wid !== id);
-      }
-      if (!state.dashboardConfig) state.dashboardConfig = {};
-      state.dashboardConfig.widgets = widgets;
-    });
+    function toggleCtx(id) {
+      const item = state.items[id];
+      if (!item) return;
+      item.ctx = item.ctx === 'personal' ? 'work' : 'personal';
+      item.touchedAt = Date.now();
+      changed();
+    }
 
-    document.getElementById('dashboard-config-btn').addEventListener('click', (e) => {
-      e.stopPropagation();
-      const panel = document.getElementById('dashboard-config-panel');
-      if (panel.classList.contains('hidden')) {
-        // Position panel below the gear button
-        const btnRect = e.currentTarget.getBoundingClientRect();
-        panel.style.top = (btnRect.bottom + 4) + 'px';
-        panel.style.right = (window.innerWidth - btnRect.right) + 'px';
-        openDashboardConfig();
-      } else {
-        closeDashboardConfig();
-      }
-    });
+    function triageAct(act, id) {
+      const item = state.items[id];
+      if (!item) return;
+      if (act === 'triage-keep') { item.touchedAt = Date.now(); changed(); }
+      else if (act === 'triage-later') moveTo(id, 'later');
+      else if (act === 'triage-drop') dropItem(id);
+    }
 
-    document.getElementById('dashboard-config-done').addEventListener('click', (e) => {
-      e.stopPropagation();
-      closeDashboardConfig();
-    });
+    // Editing re-reads the capture tokens, so "fri", "@Anna", "#p" and "!"
+    // work the same in an edit as in a new item.
+    function applyEdit(id, raw) {
+      const item = state.items[id];
+      if (!item) return;
+      const p = FN.parseCapture(raw, new Date());
+      if (!p) return; // emptied: keep the item (drop it with ×)
+      const before = JSON.stringify(item);
+      item.text = p.text;
+      if (p.who) item.who = p.who;
+      if (p.due) item.due = p.due;
+      const ec = explicitCtx(raw);
+      if (ec) item.ctx = ec;
+      if (JSON.stringify(item) !== before) item.touchedAt = Date.now();
+      if (p.list === 'today' && item.list !== 'today') moveTo(id, 'today');
+      else if (p.list === 'waiting' && item.list !== 'waiting') moveTo(id, 'waiting');
+      if (JSON.stringify(item) !== before) scheduleSave();
+    }
 
-    // Close config panel when clicking outside
-    document.addEventListener('click', (e) => {
-      const panel = document.getElementById('dashboard-config-panel');
-      if (!panel.classList.contains('hidden') && !e.target.closest('#dashboard-config-panel') && !e.target.closest('#dashboard-config-btn')) {
-        closeDashboardConfig();
-      }
-    });
-
-    // roundRect polyfill for older browsers
-    if (!CanvasRenderingContext2D.prototype.roundRect) {
-      CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
-        if (!Array.isArray(r)) r = [r, r, r, r];
-        this.moveTo(x + r[0], y);
-        this.lineTo(x + w - r[1], y);
-        this.quadraticCurveTo(x + w, y, x + w, y + r[1]);
-        this.lineTo(x + w, y + h - r[2]);
-        this.quadraticCurveTo(x + w, y + h, x + w - r[2], y + h);
-        this.lineTo(x + r[3], y + h);
-        this.quadraticCurveTo(x, y + h, x, y + h - r[3]);
-        this.lineTo(x, y + r[0]);
-        this.quadraticCurveTo(x, y, x + r[0], y);
-        this.closePath();
+    function startEdit(id, textEl) {
+      const item = state.items[id];
+      if (!item || editingId) return;
+      editingId = id;
+      const input = document.createElement('input');
+      input.className = 'todo-edit';
+      input.value = item.text;
+      textEl.replaceWith(input);
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+      let finished = false;
+      const finish = (save) => {
+        if (finished) return;
+        finished = true;
+        editingId = null;
+        if (save) applyEdit(id, input.value);
+        renderTodo();
       };
-    }
-
-    function renderChart(log) {
-      const canvas = document.getElementById('chart');
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      const dpr = window.devicePixelRatio || 1;
-      const rect = canvas.parentElement.getBoundingClientRect();
-      const w = rect.width - 28;
-      const h = 180;
-      canvas.width = w * dpr;
-      canvas.height = h * dpr;
-      canvas.style.width = w + 'px';
-      canvas.style.height = h + 'px';
-      ctx.scale(dpr, dpr);
-      ctx.clearRect(0, 0, w, h);
-
-      // Build daily counts for last 14 days
-      const days = [];
-      const today = new Date();
-      for (let i = 13; i >= 0; i--) {
-        const d = new Date(today);
-        d.setDate(d.getDate() - i);
-        days.push(toDateStr(d));
-      }
-
-      const proCounts = {};
-      const perCounts = {};
-      days.forEach(d => { proCounts[d] = 0; perCounts[d] = 0; });
-      log.forEach(entry => {
-        if (proCounts[entry.date] !== undefined && entry.category === 'professional') proCounts[entry.date]++;
-        if (perCounts[entry.date] !== undefined && entry.category === 'personal') perCounts[entry.date]++;
+      input.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+        else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
       });
-
-      // For cumulative mode, also count all completions before the 14-day window
-      let proRunning = 0;
-      let perRunning = 0;
-      if (chartMode === 'cumulative') {
-        const firstDay = days[0];
-        log.forEach(entry => {
-          if (entry.date < firstDay) {
-            if (entry.category === 'professional') proRunning++;
-            else if (entry.category === 'personal') perRunning++;
-          }
-        });
-      }
-
-      // Build display values
-      const proDisplay = [];
-      const perDisplay = [];
-      if (chartMode === 'cumulative') {
-        days.forEach(d => {
-          proRunning += proCounts[d];
-          perRunning += perCounts[d];
-          proDisplay.push(proRunning);
-          perDisplay.push(perRunning);
-        });
-      } else {
-        days.forEach(d => {
-          proDisplay.push(proCounts[d]);
-          perDisplay.push(perCounts[d]);
-        });
-      }
-
-      const maxVal = Math.max(1, ...proDisplay.map((v, i) => v + perDisplay[i]));
-      const chartH = h - 30;
-      const originX = 30;
-      const originY = h - 20;
-
-      // Grid lines
-      ctx.strokeStyle = 'rgba(255,255,255,0.04)';
-      ctx.lineWidth = 0.5;
-      for (let i = 0; i <= 4; i++) {
-        const y = originY - (chartH / 4) * i;
-        ctx.beginPath();
-        ctx.moveTo(originX, y);
-        ctx.lineTo(w, y);
-        ctx.stroke();
-      }
-
-      // Y-axis labels
-      ctx.fillStyle = '#5a5c74';
-      ctx.font = '10px Segoe UI, system-ui, sans-serif';
-      ctx.textAlign = 'right';
-      for (let i = 0; i <= 4; i++) {
-        const val = Math.round((maxVal / 4) * i);
-        const y = originY - (chartH / 4) * i;
-        ctx.fillText(val, originX - 4, y + 3);
-      }
-
-      if (chartMode === 'cumulative') {
-        // Line chart for cumulative
-        const barAreaW = w - 40;
-        const step = barAreaW / (days.length - 1);
-
-        // Total fill (area under curve)
-        ctx.beginPath();
-        ctx.moveTo(originX, originY);
-        days.forEach((d, i) => {
-          const x = originX + step * i;
-          const totalVal = proDisplay[i] + perDisplay[i];
-          const y = originY - (totalVal / maxVal) * chartH;
-          ctx.lineTo(x, y);
-        });
-        ctx.lineTo(originX + step * (days.length - 1), originY);
-        ctx.closePath();
-        ctx.fillStyle = 'rgba(180, 142, 255, 0.06)';
-        ctx.fill();
-
-        // Professional line
-        ctx.beginPath();
-        ctx.strokeStyle = '#5b9cf5';
-        ctx.lineWidth = 2;
-        ctx.lineJoin = 'round';
-        days.forEach((d, i) => {
-          const x = originX + step * i;
-          const y = originY - (proDisplay[i] / maxVal) * chartH;
-          if (i === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        });
-        ctx.stroke();
-
-        // Personal line
-        ctx.beginPath();
-        ctx.strokeStyle = '#6dd4a0';
-        ctx.lineWidth = 2;
-        ctx.lineJoin = 'round';
-        days.forEach((d, i) => {
-          const x = originX + step * i;
-          const y = originY - (perDisplay[i] / maxVal) * chartH;
-          if (i === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        });
-        ctx.stroke();
-
-        // Dots on lines
-        days.forEach((d, i) => {
-          const x = originX + step * i;
-          // Pro dot
-          const yPro = originY - (proDisplay[i] / maxVal) * chartH;
-          ctx.fillStyle = '#5b9cf5';
-          ctx.beginPath();
-          ctx.arc(x, yPro, 3, 0, Math.PI * 2);
-          ctx.fill();
-          // Per dot
-          const yPer = originY - (perDisplay[i] / maxVal) * chartH;
-          ctx.fillStyle = '#6dd4a0';
-          ctx.beginPath();
-          ctx.arc(x, yPer, 3, 0, Math.PI * 2);
-          ctx.fill();
-        });
-
-        // Date labels
-        days.forEach((d, i) => {
-          if (i % 2 === 0 || days.length <= 7) {
-            const x = originX + step * i;
-            ctx.fillStyle = '#5a5c74';
-            ctx.font = '9px Segoe UI, system-ui, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText(d.slice(5), x, originY + 12);
-          }
-        });
-
-      } else {
-        // Bar chart for daily
-        const barAreaW = w - 40;
-        const barW = Math.max(4, (barAreaW / days.length) - 6);
-
-        days.forEach((d, i) => {
-          const x = originX + (barAreaW / days.length) * i + 3;
-          const proH = (proDisplay[i] / maxVal) * chartH;
-          const perH = (perDisplay[i] / maxVal) * chartH;
-          const totalH = proH + perH;
-
-          if (proH > 0) {
-            ctx.fillStyle = '#5b9cf5';
-            ctx.beginPath();
-            ctx.roundRect(x, originY - totalH, barW, proH, [3, 3, 0, 0]);
-            ctx.fill();
-          }
-
-          if (perH > 0) {
-            ctx.fillStyle = '#6dd4a0';
-            ctx.beginPath();
-            ctx.roundRect(x, originY - perH, barW, perH, [3, 3, 0, 0]);
-            ctx.fill();
-          }
-
-          if (proH === 0 && perH === 0) {
-            ctx.fillStyle = 'rgba(255,255,255,0.03)';
-            ctx.beginPath();
-            ctx.roundRect(x, originY - 3, barW, 3, [2, 2, 0, 0]);
-            ctx.fill();
-          }
-
-          if (i % 2 === 0 || days.length <= 7) {
-            ctx.fillStyle = '#5a5c74';
-            ctx.font = '9px Segoe UI, system-ui, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText(d.slice(5), x + barW / 2, originY + 12);
-          }
-        });
-      }
+      input.addEventListener('blur', () => finish(true));
     }
+
+    // One hidden date input, opened next to the badge that was clicked.
+    let dueInput = null;
+    let dueTarget = null;
+    function pickDue(id, anchor) {
+      if (!state.items[id]) return;
+      if (!dueInput) {
+        dueInput = document.createElement('input');
+        dueInput.type = 'date';
+        dueInput.style.cssText = 'position:fixed;opacity:0;width:1px;height:1px;border:0;padding:0;pointer-events:none;';
+        document.body.appendChild(dueInput);
+        dueInput.addEventListener('change', () => {
+          const item = state.items[dueTarget];
+          if (!item) return;
+          if (FN.isDateStr(dueInput.value)) item.due = dueInput.value;
+          else delete item.due;
+          item.touchedAt = Date.now();
+          changed();
+        });
+      }
+      const r = anchor.getBoundingClientRect();
+      dueInput.style.left = r.left + 'px';
+      dueInput.style.top = r.bottom + 'px';
+      dueTarget = id;
+      dueInput.value = state.items[id].due || '';
+      try { dueInput.showPicker(); } catch (e) { /* not user-activated */ }
+    }
+
+    // --- To-do: toast with undo ---
+    let toastTimer = null;
+    let undoFn = null;
+    function toast(msg, undo) {
+      const el = document.getElementById('toast');
+      el.innerHTML = '<span>' + escapeHtml(msg) + '</span>' + (undo ? '<button id="toast-undo">Undo</button>' : '');
+      el.classList.remove('hidden');
+      undoFn = undo || null;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { el.classList.add('hidden'); undoFn = null; }, 5000);
+    }
+    document.getElementById('toast').addEventListener('click', (e) => {
+      if (e.target.id !== 'toast-undo' || !undoFn) return;
+      const f = undoFn;
+      undoFn = null;
+      document.getElementById('toast').classList.add('hidden');
+      f();
+    });
+
+    // --- To-do: events (delegated) ---
+    const todoScroll = document.getElementById('todo-scroll');
+    todoScroll.addEventListener('click', (e) => {
+      const el = e.target.closest('[data-act]');
+      if (!el) return;
+      const act = el.dataset.act;
+      const row = el.closest('[data-id]');
+      const id = row && row.dataset.id;
+      switch (act) {
+        case 'edit': startEdit(id, el); break;
+        case 'ctx': toggleCtx(id); break;
+        case 'due': pickDue(id, el); break;
+        case 'move': moveTo(id, el.dataset.to); break;
+        case 'drop': dropItem(id); break;
+        case 'keep': keepSuggestion(id); break;
+        case 'open-pick': openPick(true); break;
+        case 'toggle-later': laterOpen = !laterOpen; renderTodo(); break;
+        case 'triage-close': triageDismissed = FN.dateStr(new Date()); renderTodo(); break;
+        case 'triage-keep': case 'triage-later': case 'triage-drop': triageAct(act, id); break;
+      }
+    });
+    todoScroll.addEventListener('change', (e) => {
+      if (e.target.dataset.act !== 'tick') return;
+      const row = e.target.closest('[data-id]');
+      if (row) setDone(row.dataset.id, e.target.checked);
+    });
+
+    document.getElementById('ctx-filter').addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      ctxFilter = b.dataset.ctx;
+      state.preferences.ctxFilter = ctxFilter;
+      scheduleSave();
+      renderTodo();
+    });
+
+    // --- To-do: capture ---
+    const captureInput = document.getElementById('capture-input');
+    const LIST_NAMES = { today: 'Today', next: 'Next', waiting: 'Waiting', later: 'Later' };
+
+    function captureCtx(p, raw) {
+      return explicitCtx(raw) || ctxFilter || p.ctx;
+    }
+
+    function updateCaptureHint() {
+      const hint = document.getElementById('capture-hint');
+      const raw = captureInput.value;
+      if (!raw.trim()) {
+        hint.innerHTML = document.activeElement === captureInput
+          ? '<b>@who</b> person · <b>fri</b> <b>12/10</b> due · <b>#p</b> personal · <b>!</b> Today · <b>~</b> Waiting'
+          : '';
+        return;
+      }
+      const p = FN.parseCapture(raw, new Date());
+      if (!p) { hint.innerHTML = ''; return; }
+      let list = p.list;
+      if (list === 'today' && todayFull()) list = 'next';
+      const parts = ['<b>' + LIST_NAMES[list] + '</b>' + (p.list === 'today' && list !== 'today' ? ' (Today is full)' : '')];
+      if (p.who) parts.push('@' + escapeHtml(p.who));
+      if (p.due) parts.push('due ' + dueLabel(p.due, FN.dateStr(new Date())));
+      parts.push(captureCtx(p, raw) === 'personal' ? 'personal' : 'work');
+      hint.innerHTML = '→ ' + parts.join(' · ');
+    }
+
+    function addFromCapture(raw) {
+      const p = FN.parseCapture(raw, new Date());
+      if (!p) return;
+      p.ctx = captureCtx(p, raw);
+      let note = '';
+      if (p.list === 'today' && todayFull()) { p.list = 'next'; note = 'Today is full, so it went to Next.'; }
+      const item = FN.makeItem(p, Date.now());
+      state.items[item.id] = item;
+      captureInput.value = '';
+      updateCaptureHint();
+      changed();
+      if (note) toast(note);
+    }
+
+    captureInput.addEventListener('input', updateCaptureHint);
+    captureInput.addEventListener('focus', updateCaptureHint);
+    captureInput.addEventListener('blur', updateCaptureHint);
+    captureInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); addFromCapture(captureInput.value); }
+      else if (e.key === 'Escape') { captureInput.value = ''; captureInput.blur(); }
+    });
+
+    // --- To-do: keyboard ---
+    document.addEventListener('keydown', (e) => {
+      if (pick) { pickKey(e); return; }
+      if (!document.getElementById('panel-todo').classList.contains('active')) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target;
+      const row = t.closest && t.closest('.todo-item.suggested');
+      if (row && e.key === 'Enter') { e.preventDefault(); keepSuggestion(row.dataset.id); return; }
+      if (row && e.key === 'Delete') { e.preventDefault(); dropItem(row.dataset.id); return; }
+      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable) return;
+      const k = e.key.toLowerCase();
+      if (k === '/' || k === 'n') { e.preventDefault(); captureInput.focus(); return; }
+      const tri = document.querySelector('.card.triage');
+      const triAct = { k: 'triage-keep', l: 'triage-later', d: 'triage-drop' }[k];
+      if (tri && triAct) { e.preventDefault(); triageAct(triAct, tri.dataset.id); }
+    });
+
+    // --- Morning pick ---
+    // First focus of a new day: unfinished Today items one at a time
+    // (carry / back to Next / drop), then choose up to the cap from Next.
+    let pick = null; // { step: 'carry' | 'pick', carry: [ids], ci, rows: [ids], chosen: Set }
+
+    function pickSlots() { return todayCap() - FN.openCount(state, 'today'); }
+
+    function pickCandidates() {
+      return FN.listItems(state, 'next', { today: FN.dateStr(new Date()), suggested: false })
+        .filter(i => !FN.isDone(i)).map(i => i.id);
+    }
+
+    function openPick(skipCarry) {
+      if (pick) return;
+      pick = { step: 'carry', carry: skipCarry ? [] : FN.carryOvers(state).filter(i => i.carriedDays > 0).map(i => i.id), ci: 0, rows: [], chosen: new Set() };
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      advancePick();
+    }
+
+    function advancePick() {
+      if (pick.step === 'carry') {
+        while (pick.ci < pick.carry.length && !state.items[pick.carry[pick.ci]]) pick.ci++;
+        if (pick.ci < pick.carry.length) return renderPick();
+        pick.step = 'pick';
+        pick.rows = pickCandidates();
+      }
+      if (!pick.rows.length || pickSlots() <= 0) {
+        const nothing = !pick.rows.length && !pick.carry.length;
+        finishPick(false);
+        if (nothing && FN.openCount(state, 'today') === 0) toast('Nothing in Next to pick from.');
+        return;
+      }
+      renderPick();
+    }
+
+    function renderPick() {
+      const overlay = document.getElementById('pick-overlay');
+      const card = document.getElementById('pick-card');
+      const now = Date.now();
+      const today = FN.dateStr(now);
+      let html;
+      if (pick.step === 'carry') {
+        const item = state.items[pick.carry[pick.ci]];
+        html = '<div class="pick-title">Still on Today (' + (pick.ci + 1) + ' of ' + pick.carry.length + ')</div>' +
+          '<div class="pick-sub">Carry it into today, send it back to Next, or drop it.</div>' +
+          '<div class="card-text">' + escapeHtml(item.text) + '</div>' +
+          '<div class="todo-meta">' + metaHtml(item, today, now) + '</div>' +
+          '<div class="card-btns">' +
+            '<button class="card-btn primary" data-pick="carry">Carry<kbd>C</kbd></button>' +
+            '<button class="card-btn" data-pick="next">To Next<kbd>N</kbd></button>' +
+            '<button class="card-btn danger" data-pick="drop">Drop<kbd>D</kbd></button>' +
+          '</div>' +
+          '<div class="pick-foot"><button class="link-btn" data-pick="skip">Not now</button></div>';
+      } else {
+        const slots = pickSlots();
+        const left = slots - pick.chosen.size;
+        html = '<div class="pick-title">Pick for today (' + pick.chosen.size + ' of ' + slots + ')</div>' +
+          '<div class="pick-sub">' + FN.openCount(state, 'today') + '/' + todayCap() + ' already on Today. Due items first. Keys 1–9 pick.</div>' +
+          '<div class="pick-list">' + pick.rows.map((id, n) => {
+            const item = state.items[id];
+            if (!item) return '';
+            const on = pick.chosen.has(id);
+            return '<div class="pick-row' + (on ? ' on' : left <= 0 ? ' off' : '') + '" data-pick-row="' + n + '">' +
+              '<span class="num">' + (n < 9 ? n + 1 : '') + '</span>' +
+              '<span class="ctx-dot' + (item.ctx === 'personal' ? ' personal' : '') + '"></span>' +
+              '<span class="t">' + escapeHtml(item.text) + (item.due ? ' <span class="badge due' + (item.due < today ? ' overdue' : '') + '">' + dueLabel(item.due, today) + '</span>' : '') + '</span>' +
+            '</div>';
+          }).join('') + '</div>' +
+          '<div class="card-btns">' +
+            '<button class="card-btn primary" data-pick="start">Start day<kbd>Enter</kbd></button>' +
+            '<button class="card-btn" data-pick="skip">Not now<kbd>Esc</kbd></button>' +
+          '</div>';
+      }
+      card.innerHTML = html;
+      overlay.classList.remove('hidden');
+    }
+
+    function pickCarry(choice) {
+      const id = pick.carry[pick.ci];
+      pick.ci++;
+      if (choice === 'next') moveTo(id, 'next');
+      else if (choice === 'drop') dropItem(id);
+      else if (state.items[id]) { state.items[id].touchedAt = Date.now(); changed(); }
+      advancePick();
+    }
+
+    function togglePickRow(n) {
+      const id = pick.rows[n];
+      if (!id) return;
+      if (pick.chosen.has(id)) pick.chosen.delete(id);
+      else if (pick.chosen.size < pickSlots()) pick.chosen.add(id);
+      renderPick();
+    }
+
+    function finishPick(apply) {
+      if (apply) {
+        for (const id of pick.rows) {
+          if (pick.chosen.has(id) && state.items[id] && !todayFull()) FN.moveItem(state.items[id], 'today', Date.now());
+        }
+      }
+      state.meta.lastPick = FN.dateStr(new Date());
+      pick = null;
+      document.getElementById('pick-overlay').classList.add('hidden');
+      changed();
+    }
+
+    function pickKey(e) {
+      if (!document.getElementById('onboarding').classList.contains('hidden')) return;
+      const k = e.key.toLowerCase();
+      if (pick.step === 'carry') {
+        if (k === 'c') pickCarry('carry');
+        else if (k === 'n') pickCarry('next');
+        else if (k === 'd') pickCarry('drop');
+        else if (k === 'escape') finishPick(false);
+        else return;
+      } else {
+        if (/^[1-9]$/.test(k)) togglePickRow(Number(k) - 1);
+        else if (k === 'enter') finishPick(true);
+        else if (k === 'escape') finishPick(false);
+        else return;
+      }
+      e.preventDefault();
+    }
+
+    document.getElementById('pick-card').addEventListener('click', (e) => {
+      if (!pick) return;
+      const row = e.target.closest('[data-pick-row]');
+      if (row) { togglePickRow(Number(row.dataset.pickRow)); return; }
+      const b = e.target.closest('[data-pick]');
+      if (!b) return;
+      const a = b.dataset.pick;
+      if (a === 'carry' || a === 'next' || a === 'drop') pickCarry(a);
+      else if (a === 'start') finishPick(true);
+      else if (a === 'skip') finishPick(false);
+    });
+
+    // The day boundary: carry-over counting runs once a day, and the pick
+    // opens on the first focus of the day. No timers fire anything at you.
+    function checkDay(allowPick) {
+      if (!loaded) return;
+      const now = new Date();
+      if (FN.startDay(state, now)) changed();
+      if (allowPick && !pick && state.preferences.name && FN.needsPick(state, now)) openPick(false);
+    }
+    window.addEventListener('focus', () => checkDay(true));
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) checkDay(document.hasFocus()); });
+    setInterval(() => { checkDay(document.hasFocus()); if (!pick) renderTodo(); }, 60000);
+
+    // --- Compact mode: the window shrinks to the Today list ---
+    let compactHeight = 0;
+    function fitCompact(force) {
+      if (!document.body.classList.contains('compact')) return;
+      requestAnimationFrame(() => {
+        const sec = document.getElementById('sec-today');
+        if (!sec) return;
+        const h = document.querySelector('.titlebar').offsetHeight + sec.offsetHeight + 12;
+        if (force || h !== compactHeight) {
+          compactHeight = h;
+          window.api.setCompact(true, h);
+        }
+      });
+    }
+
+    function setCompact(on) {
+      state.preferences.compact = !!on;
+      document.body.classList.toggle('compact', !!on);
+      scheduleSave();
+      if (on) { showTab('todo'); fitCompact(true); }
+      else { compactHeight = 0; window.api.setCompact(false); }
+    }
+    document.getElementById('btn-compact').addEventListener('click', () => setCompact(!state.preferences.compact));
 
     // --- Window controls ---
     document.getElementById('btn-min').addEventListener('click', () => window.api.minimize());
@@ -3462,10 +2890,12 @@
         return;
       }
       const color = document.getElementById('onboard-color').value;
-      state.preferences = { name, color };
+      Object.assign(state.preferences, { name, color });
       applyPreferences(state.preferences);
       scheduleSave();
       document.getElementById('onboarding').classList.add('hidden');
+      renderTodo();
+      checkDay(true);
     });
 
     document.getElementById('onboard-name').addEventListener('keydown', (e) => {
@@ -3699,15 +3129,6 @@
       return Math.round(weekPcts.reduce((a, b) => a + b, 0) / weekPcts.length);
     }
 
-    function getXPLevel() {
-      let checks = 0;
-      for (const key in state.habitLog) { if (key.charAt(0) !== 'm') checks++; }
-      const total = checks * 10;
-      const level = Math.floor(total / 500) + 1;
-      const xpInLevel = total % 500;
-      return { total, level, xpInLevel, xpNeeded: 500 };
-    }
-
     function getFrequencyLabel(freq) {
       const labels = {
         daily: 'Daily', weekdays: 'Weekdays', weekends: 'Weekends',
@@ -3860,7 +3281,6 @@
         weekScheduled += wc.scheduled;
       });
       const weekPct = weekScheduled > 0 ? Math.round((weekCompleted / weekScheduled) * 100) : 0;
-      const xp = getXPLevel();
 
       // All-habits-complete day streak
       const dayStreak = getDayStreak();
@@ -3885,11 +3305,6 @@
         '<div class="habit-stat-card">' +
           '<div class="habit-ring-container">' + ringSvg + '<span class="habit-ring-text">' + weekPct + '%</span></div>' +
           '<div class="habit-stat-label">This Week</div>' +
-        '</div>' +
-        '<div class="habit-stat-card">' +
-          '<div class="habit-stat-icon">\u2B50</div>' +
-          '<div class="habit-stat-value blue-val">Lv ' + xp.level + '</div>' +
-          '<div class="habit-stat-label">' + xp.xpInLevel + '/' + xp.xpNeeded + ' XP</div>' +
         '</div>';
     }
 
@@ -3934,7 +3349,6 @@
         btn.addEventListener('click', () => {
           const i = parseInt(btn.dataset.idx);
           const habitId = state.habits[i].id;
-          state._deletedHabits.push(habitId);
           state.habits.splice(i, 1);
           // Clean up log entries and move keys for deleted habit
           Object.keys(state.habitLog).forEach(key => {
@@ -3997,16 +3411,6 @@
           '<span class="habit-bar-streak">\uD83D\uDD25 ' + streak + '</span>' +
         '</div>';
       });
-
-      // XP section
-      const xp = getXPLevel();
-      perfHtml += '<div class="habit-xp-section">' +
-        '<div class="habit-xp-header">' +
-          '<span class="habit-xp-level">\u2B50 Level ' + xp.level + '</span>' +
-          '<span class="habit-xp-text">' + xp.xpInLevel + ' / ' + xp.xpNeeded + ' XP</span>' +
-        '</div>' +
-        '<div class="habit-xp-track"><div class="habit-xp-fill" style="width:' + ((xp.xpInLevel / xp.xpNeeded) * 100) + '%"></div></div>' +
-      '</div>';
 
       // 4-week mini heatmap
       perfHtml += '<div style="margin-top:12px"><div class="habit-perf-title">28-Day Heatmap</div>';
@@ -4075,7 +3479,7 @@
     });
 
     // --- Elastic overscroll (optimised, one bounce per gesture, repeatable) ---
-    document.querySelectorAll('.notes-editor, .checklist-items, .dashboard, .habit-grid, .habit-manage-scroll').forEach(el => {
+    document.querySelectorAll('.notes-editor, .todo-scroll, .habit-grid, .habit-manage-scroll').forEach(el => {
       let locked = false;
       let animating = false;
       let idleTimer = null;
@@ -4123,32 +3527,28 @@
       }, { passive: false });
     });
 
-    // --- Firebase remote sync listener ---
-    if (window.api && window.api.onRemoteUpdate) {
-      window.api.onRemoteUpdate((remote) => {
-        if (remote.notes) state.notes = remote.notes;
-        if (remote._notesLastEdit) state._notesLastEdit = remote._notesLastEdit;
-        if (remote.checklist) state.checklist = remote.checklist;
-        if (remote._deletedChecklist) state._deletedChecklist = remote._deletedChecklist;
-        if (remote.completionLog) state.completionLog = remote.completionLog;
-        if (remote.preferences) {
-          state.preferences = remote.preferences;
-          applyPreferences(state.preferences);
-        }
-        if (remote.habits) state.habits = remote.habits;
-        if (remote._deletedHabits) state._deletedHabits = remote._deletedHabits;
-        if (remote.habitLog) state.habitLog = remote.habitLog;
-        if (remote.dashboardConfig !== undefined) state.dashboardConfig = remote.dashboardConfig;
+    // --- Remote sync: per-record patches from main ---
+    window.api.onRemotePatch((patch) => {
+      if (!loaded) return;
+      FN.applyPatch(state, patch);
+      const editor = document.getElementById('notes-editor');
+      // Leave the editor alone while it is being typed in.
+      if (('notes/' + activeNotesCategory) in patch && document.activeElement !== editor) {
+        editor.innerHTML = state.notes[activeNotesCategory] || '';
+      }
+      renderTodo();
+      if (document.getElementById('panel-habits').classList.contains('active')) renderActiveHabitView();
+    });
 
-        document.getElementById('notes-editor').innerHTML = state.notes[activeNotesCategory] || '';
-        renderChecklist();
-        renderDashboard();
-      });
-    }
+    // main asks for one last save before quitting
+    window.api.onFlush(async () => {
+      clearTimeout(saveTimeout);
+      try { if (loaded) await window.api.saveData(state); }
+      finally { window.api.flushed(); }
+    });
 
     // --- Init ---
     load();
-    setInterval(() => showQuote(true), 60000);
   </script>
 </body>
 </html>

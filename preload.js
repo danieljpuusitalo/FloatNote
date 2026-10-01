@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('api', {
   minimize: () => ipcRenderer.send('minimize'),
   close: () => ipcRenderer.send('close'),
   quit: () => ipcRenderer.send('quit'),
+  setCompact: (on, height) => ipcRenderer.send('set-compact', on, height),
   // Main asks for the pending debounced save before quitting; reply with flushed().
   onFlush: (callback) => ipcRenderer.on('flush', () => callback()),
   flushed: () => ipcRenderer.send('flushed'),
