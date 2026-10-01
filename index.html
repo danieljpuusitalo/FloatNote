@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Daniel's Anti-Notion FloatNote</title>
+  <script>if (location.hash === '#capture') document.documentElement.classList.add('capture');</script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -634,6 +635,15 @@
       font-size: 12px; font-weight: 700; cursor: pointer; flex-shrink: 0;
     }
 
+    /* Capture popup: index.html#capture, opened by the global hotkey */
+    :root.capture body { background: var(--bg-surface); border: 1px solid var(--accent); }
+    :root.capture body::before, :root.capture .titlebar, :root.capture .tabs, :root.capture .todo-strip,
+    :root.capture .todo-scroll, :root.capture .panel:not(#panel-todo), :root.capture .onboarding-overlay,
+    :root.capture .pick-overlay, :root.capture .toast { display: none !important; }
+    :root.capture .capture-row { padding: 12px 12px 0; }
+    :root.capture .capture-row input { font-size: 15px; padding: 10px 12px; }
+    :root.capture .capture-hint { padding: 7px 14px 0; }
+
     /* Compact: only Today stays on screen */
     .btn-compact { background: var(--green); }
     body.compact .tabs, body.compact .todo-strip, body.compact .capture-row,
@@ -1110,6 +1120,10 @@
 
     // --- State ---
     const FN = window.FNCore;
+    // The hotkey popup loads this same file as index.html#capture. It reads
+    // state for the hint but never saves (loaded stays false); it hands the
+    // text to main, which passes it on to the main window.
+    const CAPTURE = document.documentElement.classList.contains('capture');
     let state = FN.emptyState();
     let loaded = false;
     let saveTimeout = null;
@@ -1178,6 +1192,7 @@
       if (state.preferences.compact) document.body.classList.add('compact');
       renderTodo();
       checkDay(true);
+      pendingCaptures.splice(0).forEach(raw => addFromCapture(raw, true));
     }
 
     // Nothing is saved until load() has finished: saving the empty initial
@@ -2667,18 +2682,28 @@
       hint.innerHTML = '→ ' + parts.join(' · ');
     }
 
-    function addFromCapture(raw) {
+    // fromHotkey: typed in the popup, so the main window's filter does not apply.
+    function addFromCapture(raw, fromHotkey) {
+      if (CAPTURE) {
+        if (raw.trim()) window.api.captureSubmit(raw);
+        captureInput.value = '';
+        updateCaptureHint();
+        return;
+      }
       const p = FN.parseCapture(raw, new Date());
       if (!p) return;
-      p.ctx = captureCtx(p, raw);
+      p.ctx = fromHotkey ? (explicitCtx(raw) || p.ctx) : captureCtx(p, raw);
       let note = '';
       if (p.list === 'today' && todayFull()) { p.list = 'next'; note = 'Today is full, so it went to Next.'; }
       const item = FN.makeItem(p, Date.now());
       state.items[item.id] = item;
-      captureInput.value = '';
-      updateCaptureHint();
+      if (!fromHotkey) {
+        captureInput.value = '';
+        updateCaptureHint();
+      }
       changed();
       if (note) toast(note);
+      else if (fromHotkey) toast('Added to ' + LIST_NAMES[item.list] + ': \u201c' + trunc(item.text, 40) + '\u201d');
     }
 
     captureInput.addEventListener('input', updateCaptureHint);
@@ -2686,7 +2711,11 @@
     captureInput.addEventListener('blur', updateCaptureHint);
     captureInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); addFromCapture(captureInput.value); }
-      else if (e.key === 'Escape') { captureInput.value = ''; captureInput.blur(); }
+      else if (e.key === 'Escape') {
+        captureInput.value = '';
+        if (CAPTURE) window.api.captureHide();
+        else captureInput.blur();
+      }
     });
 
     // --- To-do: keyboard ---
@@ -3547,8 +3576,28 @@
       finally { window.api.flushed(); }
     });
 
+    // --- Hotkey capture ---
+    const pendingCaptures = [];
+    window.api.onCaptured((raw) => {
+      if (loaded) addFromCapture(raw, true);
+      else pendingCaptures.push(raw);
+    });
+
+    async function refreshCapture() {
+      state = FN.normalizeState(await window.api.loadData());
+      applyPreferences(state.preferences);
+      captureInput.value = '';
+      captureInput.focus();
+      updateCaptureHint();
+    }
+
     // --- Init ---
-    load();
+    if (CAPTURE) {
+      window.api.onCaptureShow(refreshCapture);
+      refreshCapture();
+    } else {
+      load();
+    }
   </script>
 </body>
 </html>

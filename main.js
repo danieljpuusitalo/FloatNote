@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, screen, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, screen, shell, globalShortcut } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const C = require('./core');
@@ -168,12 +168,7 @@ function createWindow() {
   });
 
   mainWindow.loadFile('index.html');
-  // Links (a to-do's source) open in the browser, never inside FloatNote.
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
-    return { action: 'deny' };
-  });
-  mainWindow.webContents.on('will-navigate', (e) => e.preventDefault());
+  lockNavigation(mainWindow);
   mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.on('moved', rememberBounds);
   mainWindow.on('resized', rememberBounds);
@@ -187,14 +182,99 @@ function createWindow() {
   });
 }
 
-function createTray() {
-  tray = new Tray(path.join(__dirname, 'build', 'icon.ico'));
-  tray.setToolTip('FloatNote');
+// Links (a to-do's source) open in the browser, never inside FloatNote.
+function lockNavigation(win) {
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  win.webContents.on('will-navigate', (e) => e.preventDefault());
+}
+
+// ---------- hotkey capture ----------
+//
+// A one-line popup from anywhere. It is index.html#capture in a second,
+// pre-created window, so it opens instantly. Enter hands the text to the main
+// window, which owns the state and does the adding; the popup never saves.
+
+let captureWin = null;
+let hotkey = null;
+
+function createCaptureWindow() {
+  captureWin = new BrowserWindow({
+    width: 560,
+    height: 92,
+    useContentSize: true,
+    frame: false,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    show: false,
+    backgroundColor: '#0f0f1a',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+  captureWin.loadFile('index.html', { hash: 'capture' });
+  lockNavigation(captureWin);
+  captureWin.on('blur', () => captureWin.hide());
+  captureWin.on('close', (e) => {
+    if (!quitting) {
+      e.preventDefault();
+      captureWin.hide();
+    }
+  });
+}
+
+function toggleCapture() {
+  if (!captureWin || captureWin.isDestroyed()) createCaptureWindow();
+  if (captureWin.isVisible()) return captureWin.hide();
+  // Centre on whichever screen the mouse is on, a little above the middle.
+  const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
+  const [w] = captureWin.getSize();
+  captureWin.setPosition(Math.round(area.x + (area.width - w) / 2), Math.round(area.y + area.height * 0.28));
+  captureWin.show();
+  captureWin.focus();
+  captureWin.webContents.send('capture-show');
+}
+
+// Another app can already own the wanted key (the Claude desktop app holds
+// Ctrl+Alt+Space). Rather than have no capture key, fall back, and say in the
+// tray which key is live.
+const HOTKEY_FALLBACKS = ['Ctrl+Alt+N', 'Ctrl+Shift+Alt+Space'];
+
+function registerHotkey(wanted) {
+  if (hotkey) globalShortcut.unregister(hotkey);
+  hotkey = null;
+  for (const accel of [wanted, ...HOTKEY_FALLBACKS.filter(k => k !== wanted)]) {
+    let ok = false;
+    try { ok = globalShortcut.register(accel, toggleCapture); } catch (e) { ok = false; }
+    if (ok) { hotkey = accel; break; }
+  }
+  if (hotkey !== wanted) console.warn('FloatNote: hotkey ' + wanted + ' is taken; using ' + (hotkey || 'none'));
+  updateTray();
+  return hotkey;
+}
+
+function updateTray() {
+  if (!tray) return;
+  tray.setToolTip(hotkey ? 'FloatNote (capture: ' + hotkey + ')' : 'FloatNote (no capture hotkey available)');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Show FloatNote', click: showWindow },
+    { label: 'Quick capture', accelerator: hotkey || undefined, registerAccelerator: false, click: toggleCapture },
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() }
   ]));
+}
+
+function createTray() {
+  tray = new Tray(path.join(__dirname, 'build', 'icon.ico'));
+  updateTray();
   tray.on('click', () => {
     if (mainWindow && mainWindow.isVisible() && mainWindow.isFocused()) mainWindow.hide();
     else showWindow();
@@ -213,7 +293,11 @@ if (!app.requestSingleInstanceLock()) {
     applyLoginItem(state.preferences);
     createWindow();
     createTray();
+    createCaptureWindow();
+    registerHotkey(state.preferences.hotkey || C.DEFAULT_PREFS.hotkey);
   });
+
+  app.on('will-quit', () => globalShortcut.unregisterAll());
 
   // The tray keeps the app alive with no windows open.
   app.on('window-all-closed', () => {});
@@ -243,6 +327,14 @@ ipcMain.handle('save-data', (_event, data) => { saveState(data); });
 ipcMain.on('minimize', () => mainWindow && mainWindow.minimize());
 ipcMain.on('close', () => mainWindow && mainWindow.hide());
 ipcMain.on('quit', () => app.quit());
+
+ipcMain.on('capture-submit', (_e, raw) => {
+  if (typeof raw === 'string' && raw.trim() && mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('captured', raw.slice(0, 2000));
+  }
+  if (captureWin && !captureWin.isDestroyed()) captureWin.hide();
+});
+ipcMain.on('capture-hide', () => captureWin && !captureWin.isDestroyed() && captureWin.hide());
 
 // Compact mode: shrink to the height of the Today list, and restore the full
 // size on the way out. The renderer reports the height it needs.
