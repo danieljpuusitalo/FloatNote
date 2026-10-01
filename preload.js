@@ -5,8 +5,10 @@ contextBridge.exposeInMainWorld('api', {
   saveData: (data) => ipcRenderer.invoke('save-data', data),
   minimize: () => ipcRenderer.send('minimize'),
   close: () => ipcRenderer.send('close'),
-  // Sync
-  getSyncConfig: () => ipcRenderer.invoke('get-sync-config'),
-  setSyncPassphrase: (passphrase) => ipcRenderer.invoke('set-sync-passphrase', passphrase),
-  onRemoteUpdate: (callback) => ipcRenderer.on('remote-update', (_event, data) => callback(data))
+  quit: () => ipcRenderer.send('quit'),
+  // Main asks for the pending debounced save before quitting; reply with flushed().
+  onFlush: (callback) => ipcRenderer.on('flush', () => callback()),
+  flushed: () => ipcRenderer.send('flushed'),
+  // Records changed by another device: { path → value | null }.
+  onRemotePatch: (callback) => ipcRenderer.on('remote-patch', (_e, patch) => callback(patch))
 });

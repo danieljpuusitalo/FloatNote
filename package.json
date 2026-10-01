@@ -10,6 +10,7 @@
   "homepage": "https://github.com/danieljpuusitalo/FloatNote",
   "scripts": {
     "start": "electron .",
+    "test": "node --test",
     "build": "electron-builder --win --x64 && electron-builder --win --arm64",
     "build:x64": "electron-builder --win --x64",
     "build:arm64": "electron-builder --win --arm64"
@@ -63,6 +64,7 @@
       "main.js",
       "preload.js",
       "index.html",
+      "core.js",
       "package.json",
       "build/**"
     ]
