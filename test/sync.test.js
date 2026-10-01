@@ -50,9 +50,10 @@ function fakeServer() {
 let T = Date.parse('2026-01-10T09:00:00Z');
 const tick = () => (T += 1000);
 
-function device(server) {
+function device(server, kinds) {
   const d = { state: C.emptyState(), clock: {}, patches: 0 };
   d.sync = createSync({
+    kinds,
     backend: server.client(),
     clock: d.clock,
     getRecords: () => C.toRecords(d.state),
@@ -203,4 +204,19 @@ test('a different passphrase is a different space', async () => {
   await a.add('Private to A');
   await settle(S);
   assert.equal(Object.keys(b.state.items).length, 0);
+});
+
+test('a device limited to items neither sends nor takes notes', async () => {
+  const server = fakeServer();
+  const laptop = device(server);
+  const phone = device(server, ['items', 'completions']);
+  await laptop.edit(s => { s.notes.professional = '<div>invented note</div>'; });
+  await laptop.sync.start(PASS);
+  await phone.sync.start(PASS);
+  await phone.edit(s => { s.notes.professional = ''; });
+  const id = await phone.add('Captured on the phone');
+  await settle(server);
+  assert.ok(laptop.state.items[id], 'items travel');
+  assert.equal(laptop.state.notes.professional, '<div>invented note</div>', 'the phone did not clobber the note');
+  assert.equal(phone.state.notes.professional, '', 'and did not receive it');
 });

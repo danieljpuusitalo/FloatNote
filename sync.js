@@ -12,9 +12,14 @@
 //   update(root, {'kind/key': wire|null})     multi-path write, null removes
 //   listen(root, kind, cb(key, wire)) → off   child added + changed
 //   onConnected(cb(bool)) → off
+//
+// Loaded by main.js (require) and by FloatNote-web (<script>, as window.FNSync,
+// after core.js), which supplies its own backend over the Firebase web SDK.
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./core'));
+  else root.FNSync = factory(root.FNCore);
+})(typeof self !== 'undefined' ? self : this, function (C) {
 'use strict';
-
-const C = require('./core');
 
 function rootFor(passphrase) {
   return 'sync/' + passphrase + '-v2';
@@ -27,6 +32,10 @@ function message(err) {
 function createSync(opts) {
   const { backend, clock, getRecords, onRemote, onStatus } = opts;
   const now = opts.now || Date.now;
+  // The record kinds this device sends and receives. The phone page shows only
+  // items, so it syncs only items and completions and cannot clobber notes.
+  const kinds = opts.kinds || C.RECORD_KINDS;
+  const synced = (path) => kinds.includes(path.slice(0, path.indexOf('/')));
 
   let gen = 0;          // bumped by start/stop; callbacks from an older run are ignored
   let root = null;      // set once the first reconcile is done
@@ -40,6 +49,7 @@ function createSync(opts) {
   }
 
   function push(paths) {
+    paths = paths.filter(synced);
     if (!root || !paths.length) return Promise.resolve();
     const records = getRecords();
     const map = {};
@@ -89,7 +99,7 @@ function createSync(opts) {
       if (myGen !== gen) return;
 
       const remote = {};
-      for (const kind of C.RECORD_KINDS) {
+      for (const kind of kinds) {
         for (const [key, wire] of Object.entries(snap[kind] || {})) remote[C.keyToPath(kind, key)] = wire;
       }
       const patch = {};
@@ -104,7 +114,7 @@ function createSync(opts) {
       await push(C.newerThanRemote(clock, remote).concat(purged.filter(p => p in remote)));
       if (myGen !== gen) return;
 
-      for (const kind of C.RECORD_KINDS) {
+      for (const kind of kinds) {
         unsubs.push(backend.listen(root, kind, (key, wire) => incoming(myGen, C.keyToPath(kind, key), wire)));
       }
       if (status.mode !== 'error') setStatus({ mode: 'on', lastSync: now() });
@@ -186,4 +196,5 @@ function firebaseBackend() {
   };
 }
 
-module.exports = { createSync, firebaseBackend, rootFor };
+return { createSync, firebaseBackend, rootFor, FIREBASE_CONFIG };
+});
