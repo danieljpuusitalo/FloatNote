@@ -1,0 +1,22 @@
+# The FloatNote server. Deploy from this folder: npx wrangler deploy [--env staging]
+# The pairing secret: npx wrangler secret put SETUP_KEY [--env staging]
+name = "floatnote"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[[durable_objects.bindings]]
+name = "FLOATNOTE"
+class_name = "FloatNoteDO"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["FloatNoteDO"]
+
+# A throwaway copy for two-device tests, with its own data and its own key.
+[env.staging]
+name = "floatnote-staging"
+
+[[env.staging.durable_objects.bindings]]
+name = "FLOATNOTE"
+class_name = "FloatNoteDO"

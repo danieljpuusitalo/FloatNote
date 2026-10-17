@@ -45,7 +45,47 @@ build passed the same 6 checks, installed silently over 2.0.0 (items 3 before an
 after). A task run after install (19:17, result 0, 96 s, $0.97) stored
 `meta/lastRun` with sources and counts in the installed app's state.
 
-**Next: Phase 2** (`server-core.js`, the Worker, `httpBackend`), desktop opt-in only.
+**Phase 2 is built and verified locally, on branch `phase2-server`, not deployed.**
+Nothing changes for Daniel: the installed app still syncs over Firebase.
+
+- `server-core.js` (repo root, pure, not in the installer): records keyed by raw
+  path, newest `t` wins, a tie keeps the stored copy, an older write is answered
+  with the kept copy (`stale`), a purge removes tombstones only. Each accepted
+  write gets a sequence number; `GET /api/sync?since=n` is the catch-up. Device
+  tokens are stored as SHA-256, the first pairing needs the `SETUP_KEY` secret,
+  revoking a device closes its sockets. A broadcast over 900 KiB goes out as a
+  `changed` notice (Workers caps a socket message at 1 MiB).
+- `sync.js` `httpBackend(url, token)`: HTTP writes in chunks of 1000, a WebSocket
+  for changes (token in `Sec-WebSocket-Protocol`), catch-up on reconnect, on a new
+  listener and on a sequence gap, ping every 30 s and dead after 75 s silent,
+  reconnect backoff 1 s to 60 s. A network failure reads `offline`, not `error`,
+  and coming back online with a refused push waiting reconciles at once.
+- `server/`: `worker.js` (Worker + `FloatNoteDO`, SQLite storage, hibernating
+  sockets, ping answered without waking), `wrangler.toml` (production `floatnote`
+  and `--env staging`), its own `package.json` so wrangler stays out of the app.
+  `server/dev-server.mjs` is a Node stand-in on `node:sqlite` + `ws`, because
+  `wrangler dev` needs workerd, which has no Windows-on-Arm build.
+- Desktop opt-in for dev runs: `FLOATNOTE_SYNC=server` reads
+  `<data dir>/floatnote-server.json` (`{url, token}`, written by
+  `tools/pair-device.mjs`; never print it).
+
+Verified: `npm test` 141/141, 26 in `test/server.test.js` (server unit, SQLite vs
+in-memory parity with a negative control, auth, and `createSync` + `httpBackend`
+end to end over a fake network: offline, dropped and silent sockets, a lost
+broadcast, a slow clock, a revoked device, oversized changes, chunking). Mutations
+of the gap catch-up, the stale delivery, the notice and the `t 0` rule each fail
+their test. `node tools/check-server-sync.mjs`: two real Electron windows through
+the dev server, two passes of add, edit, tick, untick, delete, then the server
+stopped, both edit (offline, not error; nothing crosses), restarted: both converge
+with identical item records; no page exceptions. That check caught a real bug the
+unit tests had missed: `core.recoverClock` stamps unknown-age records `t 0`, which
+the server refused, so a recovered device could never push.
+`wrangler deploy --dry-run` bundles (14.6 KiB, the DO binding present).
+
+**Next in Phase 2: deploy staging** (`cd server && npx wrangler deploy --env staging`,
+then `npx wrangler secret put SETUP_KEY --env staging`) and run the two-window check
+against it, which is the first time the Durable Object adapter itself runs.
+Blocked on Daniel: wrangler is not logged in (`! npx wrangler login`, once).
 
 **The direction is `docs/INTAKE.md`**: how to-dos flow in, and what earns a place.
 Read it before changing the pick, the drop folder or the skill.
@@ -101,8 +141,9 @@ Reality findings:
 
 ## Next
 
-1. Phases 2 to 6 of `bright-coalescing-pond.md`: server, phone, decisions relay,
-   cutover (2.2.0), retire Firebase.
+1. Finish Phase 2 (staging deploy, above), then Phases 3 to 6 of
+   `bright-coalescing-pond.md`: phone, decisions relay, cutover (2.2.0), retire
+   Firebase.
 2. Watch keep rate per source in the run reports; Awaiting-their-reply is 0 of 3
    so far.
 3. U12, U16, U18 and the reasoned sync items, when they bite.

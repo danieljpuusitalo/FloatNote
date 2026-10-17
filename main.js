@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain, Tray, Menu, screen, shell, globalShortcut, 
 const path = require('path');
 const fs = require('fs');
 const C = require('./core');
-const { createSync, firebaseBackend } = require('./sync');
+const { createSync, firebaseBackend, httpBackend } = require('./sync');
 
 // FLOATNOTE_DATA_DIR runs a second, independent copy (sync testing, or a dry run
 // against a copy of real data). It must be set before anything reads userData,
@@ -18,6 +18,11 @@ const V1_BACKUP_PATH = path.join(DATA_DIR, 'floatnote-data.v1.json');
 const CLOCK_PATH = path.join(DATA_DIR, 'floatnote-clock.json');
 const WINDOW_PATH = path.join(DATA_DIR, 'floatnote-window.json');
 const SYNC_PATH = path.join(DATA_DIR, 'floatnote-sync.json');
+// FLOATNOTE_SYNC=server syncs with the FloatNote server (server/) instead of
+// Firebase, as the device paired by tools/pair-device.mjs. Dev runs only until
+// the cutover release. The file holds the device token: never print it.
+const SERVER_SYNC = process.env.FLOATNOTE_SYNC === 'server';
+const SERVER_PATH = path.join(DATA_DIR, 'floatnote-server.json');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 const BACKUP_KEEP = 14;
 const SYNCED_WRITE_MS = 60 * 60 * 1000;
@@ -160,6 +165,11 @@ function readPassphrase() {
   return c && typeof c.passphrase === 'string' ? c.passphrase.trim() : '';
 }
 
+function readServer() {
+  const c = readJson(SERVER_PATH);
+  return c && typeof c.url === 'string' && typeof c.token === 'string' ? c : null;
+}
+
 function send(channel, ...args) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, ...args);
 }
@@ -168,7 +178,7 @@ function send(channel, ...args) {
 function info() {
   return {
     sync: sync ? sync.status() : { mode: 'off' },
-    configured: !!readPassphrase(),
+    configured: SERVER_SYNC ? !!readServer() : !!readPassphrase(),
     hotkey,
     wantedHotkey,
     packaged: app.isPackaged
@@ -176,8 +186,9 @@ function info() {
 }
 
 function setupSync() {
+  const server = SERVER_SYNC ? readServer() : null;
   sync = createSync({
-    backend: firebaseBackend(),
+    backend: server ? httpBackend(server.url, server.token) : firebaseBackend(),
     clock,
     getRecords: () => C.toRecords(state),
     onRemote: (patch) => {
@@ -196,7 +207,8 @@ function setupSync() {
     },
     onStatus: () => send('info', info())
   });
-  sync.start(readPassphrase());
+  // The server backend ignores the root; any non-empty one turns sync on.
+  sync.start(SERVER_SYNC ? (server ? 'server' : '') : readPassphrase());
   // A start that failed offline retries on its own; waking from sleep is the
   // likeliest moment the network is back.
   if (powerMonitor) powerMonitor.on('resume', () => sync.retryNow());
@@ -593,7 +605,7 @@ ipcMain.handle('set-passphrase', (_event, raw) => {
   if (p && p.length < 8) return { ok: false, error: 'Use at least 8 characters.' };
   if (/[.#$\[\]\/]/.test(p)) return { ok: false, error: 'The characters . # $ [ ] / are not allowed.' };
   writeJsonAtomic(SYNC_PATH, { passphrase: p });
-  if (sync) sync.start(p);
+  if (sync && !SERVER_SYNC) sync.start(p);
   send('info', info());
   return { ok: true };
 });

@@ -19,8 +19,14 @@ not build targets of this one.
 parsing, v1→v2 migration, records/stamp/merge, the patch window (a remote change
 must not undo an unsaved or in-flight local edit), carry-over, staleness, streak,
 drop-folder intake (suggestions, direct adds, done hints, dedupe). `sync.test.js` drives `sync.js` against an in-memory server:
-convergence, deletes, unticks, reconnect catch-up, tombstone purge, errors. Both
-carry negative controls.
+convergence, deletes, unticks, reconnect catch-up, tombstone purge, errors.
+`server.test.js` covers `server-core.js` (the sync server's logic, its SQLite store
+against `node:sqlite`) and `sync.js` + `httpBackend` end to end against it over a
+fake network. All three carry negative controls.
+
+`node tools/check-server-sync.mjs` is the two-window hand-check for the server
+backend: two real Electron instances on scratch data through `server/dev-server.mjs`,
+including the server going away and coming back. Needs `cd server && npm install`.
 
 It covers the logic, not the UI. Anything about `index.html` or the window is a
 hand-check (`npm start`, see the data-dir trap below). Say which one a claim is.
@@ -74,7 +80,8 @@ features and the drop-folder format; version in `package.json`.
 - Data files in the data dir: `floatnote-data.json` (state, `schemaVersion: 2`),
   `floatnote-clock.json` (per-record sync timestamps and tombstones; deleting it
   makes every record look new), `floatnote-window.json`, `floatnote-sync.json`
-  (passphrase; never print it), `backups/` (one per day, 14 kept), `inbox/`
+  (passphrase; never print it), `floatnote-server.json` (sync server url and
+  device token, read only with `FLOATNOTE_SYNC=server`; never print it), `backups/` (one per day, 14 kept), `inbox/`
   (the drop folder, with `processed.log` and `rejected/`), `inbox-seen.json`
   (what was suggested before; deleting it lets old suggestions come back).
 - **The drop folder is read by main, which then edits state itself.** That is the
@@ -100,4 +107,14 @@ features and the drop-folder format; version in `package.json`.
   Two copies against real Firebase: run each with its own `FLOATNOTE_DATA_DIR` and
   a throwaway passphrase, and delete its `sync/<pass>-v2` node afterwards. Sync
   races only show up there and only some runs, so repeat a pass before trusting it.
+- **The sync server (`server/`, logic in `server-core.js`) is replacing Firebase**
+  (plan `~/.claude/plans/bright-coalescing-pond.md`). Until the cutover release it
+  is opt-in for dev runs: `FLOATNOTE_SYNC=server` plus a device paired with
+  `tools/pair-device.mjs` (reads the setup key from `FLOATNOTE_SETUP_KEY`).
+  `server/` has its own `package.json` so wrangler never enters the app's
+  dependencies, and neither it nor `server-core.js` is in `build.files`.
+  `wrangler dev` cannot run here (no workerd build for Windows on Arm): test
+  locally with `server/dev-server.mjs`, and test the Durable Object itself on the
+  staging Worker (`npx wrangler deploy --env staging`). Do not use other
+  projects' Cloudflare tokens.
 - Electron 40 with electron-builder 25. NSIS one-click, per-user install.

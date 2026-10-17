@@ -1,0 +1,15 @@
+{
+  "name": "floatnote-server",
+  "private": true,
+  "description": "The FloatNote sync server: a Cloudflare Worker and Durable Object. Kept apart from the app so wrangler never enters the installer's dependencies.",
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy --env=\"\"",
+    "deploy:staging": "wrangler deploy --env staging",
+    "check": "wrangler deploy --env=\"\" --dry-run --outdir .wrangler/dry-run"
+  },
+  "devDependencies": {
+    "wrangler": "^4.151.1",
+    "ws": "^8.22.0"
+  }
+}
