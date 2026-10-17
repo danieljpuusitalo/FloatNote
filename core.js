@@ -133,22 +133,30 @@
     if (s.startsWith('~')) { list = 'waiting'; s = s.slice(1).trim(); }
     let toToday = false;
     const words = [];
+    const mention = []; // words[i] came from an @name
     for (const tok of s.split(/\s+/).filter(Boolean)) {
       const low = tok.toLowerCase();
       if (tok === '!') { toToday = true; continue; }
+      if (tok === '~') { list = 'waiting'; continue; } // anywhere, like "!"
       if (low === '#p' || low === '#personal') { ctx = 'personal'; continue; }
       if (low === '#w' || low === '#work') { ctx = 'work'; continue; }
       const at = tok.match(/^@([^\s@]+?)([.,;:!?]*)$/);
       if (at && at[1]) {
         if (!who) who = at[1];
         words.push(at[1] + at[2]);
+        mention.push(true);
         continue;
       }
       words.push(tok);
+      mention.push(false);
     }
-    if (words.length > 1) {
-      const d = parseDateWord(words[words.length - 1], now);
-      if (d) { due = d; words.pop(); }
+    // The date is the last word, not counting @names after it ("send deck
+    // fri @Rui"). Only the end: "Review Friday notes" keeps its Friday.
+    let j = words.length - 1;
+    while (j >= 0 && mention[j]) j--;
+    if (j >= 0 && words.length > 1) {
+      const d = parseDateWord(words[j], now);
+      if (d) { due = d; words.splice(j, 1); }
     }
     const text = words.join(' ').trim();
     if (!text) return null;
@@ -228,9 +236,10 @@
     let items = Object.values(state.items).filter(i =>
       i.list === list && isVisible(i, today) && (!opts.ctx || i.ctx === opts.ctx) &&
       (opts.suggested === undefined || !!i.suggested === opts.suggested));
-    if (list === 'next' || list === 'later') items.sort(compareNext);
-    else if (list === 'waiting') items.sort((a, b) => (a.listAt || 0) - (b.listAt || 0));
-    else items.sort((a, b) => (isDone(a) - isDone(b)) || (a.listAt || 0) - (b.listAt || 0));
+    // Every list sinks the items finished today below the open ones.
+    const byList = (list === 'next' || list === 'later') ? compareNext
+      : (a, b) => (a.listAt || 0) - (b.listAt || 0);
+    items.sort((a, b) => (isDone(a) - isDone(b)) || byList(a, b));
     return items;
   }
 
@@ -704,7 +713,7 @@
     newId, stableStringify, hash, clone,
     parseDateWord, parseCapture,
     makeItem, moveItem, isDone, isVisible, isStale, staleItems, needsTriage,
-    compareNext, listItems, openCount,
+    compareNext, listItems, openCount, todayCapOf,
     completeItem, uncompleteItem, doneOn, streak,
     startDay, needsPick, carryOvers,
     ingestSuggestions, ingestInbox, suggestionKey, pruneSeen,

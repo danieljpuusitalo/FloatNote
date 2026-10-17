@@ -25,10 +25,27 @@ test('capture: ~ prefix means waiting, and beats !', () => {
   assert.equal(C.parseCapture('~ @Jens reply !', NOW).list, 'waiting');
 });
 
+test('capture: a lone ~ anywhere means waiting, like !', () => {
+  assert.deepEqual(C.parseCapture('Call Ines @Ines ~', NOW), { text: 'Call Ines Ines', ctx: 'work', list: 'waiting', who: 'Ines' });
+  assert.equal(C.parseCapture('Reply ! ~', NOW).list, 'waiting');
+  // Only a lone ~: one inside a word is text.
+  const r = C.parseCapture('Budget ~5k', NOW);
+  assert.equal(r.list, 'next');
+  assert.equal(r.text, 'Budget ~5k');
+});
+
 test('capture: a date word only counts as the last token', () => {
   const r = C.parseCapture('monday meeting prep', NOW);
   assert.equal(r.due, undefined);
   assert.equal(r.text, 'monday meeting prep');
+});
+
+test('capture: an @name after the date does not hide it', () => {
+  assert.deepEqual(C.parseCapture('Send deck fri @Rui', NOW), {
+    text: 'Send deck Rui', ctx: 'work', list: 'next', who: 'Rui', due: '2026-10-02'
+  });
+  // Still the end only: a mid-text weekday followed by plain words stays text.
+  assert.equal(C.parseCapture('Review friday notes @Rui', NOW).due, undefined);
 });
 
 test('capture: a lone date word is text, not an empty item', () => {
@@ -183,6 +200,20 @@ test('next ordering: dated soonest first, then undated newest first', () => {
     C.makeItem({ id: 'd', text: 'd', due: '2026-10-03' }, T)
   ]);
   assert.deepEqual(C.listItems(s, 'next', { today: '2026-10-01' }).map(i => i.id), ['d', 'b', 'c', 'a']);
+});
+
+test('done today sinks below the open items in every list', () => {
+  for (const list of ['today', 'next', 'waiting', 'later']) {
+    const s = stateWith([
+      C.makeItem({ id: 'a', text: 'a', list, due: '2026-10-02' }, T - 2 * DAY),
+      C.makeItem({ id: 'b', text: 'b', list }, T - DAY),
+      C.makeItem({ id: 'c', text: 'c', list }, T)
+    ]);
+    // Negative control: before the tick, 'a' is not last.
+    assert.notEqual(C.listItems(s, list, { today: '2026-10-01' }).map(i => i.id).at(-1), 'a', list);
+    C.completeItem(s, 'a', T);
+    assert.equal(C.listItems(s, list, { today: '2026-10-01' }).map(i => i.id).at(-1), 'a', list);
+  }
 });
 
 test('done today stays visible, done yesterday is hidden', () => {
