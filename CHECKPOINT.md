@@ -1,7 +1,7 @@
 # FloatNote checkpoint
 
-**2.0.0 is released and installed on Daniel's machine (2026-10-17).** `v2` is merged
-to `master`. The arm64 build is installed per-user at
+**2.1.0 is released and installed on Daniel's machine (2026-10-17)**, on top of
+2.0.0 (same day). `master`, tag `v2.1.0`. The arm64 build is installed per-user at
 `%LOCALAPPDATA%\Programs\floatnote\FloatNote.exe`, with its own Desktop and Start
 menu shortcuts. The old Desktop shortcut that ran `npx electron .` from this repo
 is gone, and `launch.vbs` / `launch.bat` are deleted, so the checked-out branch no
@@ -12,10 +12,11 @@ On first launch it set his v1 data aside as `%APPDATA%\FloatNote\floatnote-data.
 of the v1 files is also at `~/FloatNote-v1-backup-2026-10-17/`. Sync resumed on the
 `<passphrase>-v2` node from his existing `floatnote-sync.json`.
 
-**Now: branch `phase1-collector`, Phase 1 of `~/.claude/plans/bright-coalescing-pond.md`**
-(one connected platform: automations that report themselves, then a Cloudflare
-Worker + Durable Object replacing Firebase, then the same `index.html` on the
-phone). Phase 1 is built and verified, not yet released:
+**The plan is `~/.claude/plans/bright-coalescing-pond.md`** (one connected platform:
+automations that report themselves, then a Cloudflare Worker + Durable Object
+replacing Firebase, then the same `index.html` on the phone). Daniel keeps the
+installed desktop app (2026-10-17: asked about a web-only desktop, chose to stay
+with the Electron model). **Phase 1 is released in 2.1.0:**
 
 - `run` entries in the drop folder (`core.recordRun`), counted from what the app
   took in, merged by id; `core.runStatus` gives one line: in the morning pick
@@ -39,11 +40,12 @@ lines under Today, a negative control, no exceptions (6/6). Plumbing on a scratc
 data dir: a skill that stops early is reported as a problem. Probes: `list_labels`
 refused, a write outside the inbox refused, Telegram not loaded. **First real
 scheduled run, 2026-10-17 18:32**: task result 0, 84 s, $0.99, 2 checkpoint
-suggestions, nothing refused. The installed 2.0.0 takes the items but ignores the
-`run` entry: the run line needs 2.1.0.
+suggestions, nothing refused. **2.1.0**: both installers built, the packaged arm64
+build passed the same 6 checks, installed silently over 2.0.0 (items 3 before and
+after). A task run after install (19:17, result 0, 96 s, $0.97) stored
+`meta/lastRun` with sources and counts in the installed app's state.
 
-**Next: release 2.1.0** (version bump, `npm run build`, both installers, Daniel's
-hand), then Phase 2 (`server-core.js`, the Worker, `httpBackend`).
+**Next: Phase 2** (`server-core.js`, the Worker, `httpBackend`), desktop opt-in only.
 
 **The direction is `docs/INTAKE.md`**: how to-dos flow in, and what earns a place.
 Read it before changing the pick, the drop folder or the skill.
@@ -99,12 +101,11 @@ Reality findings:
 
 ## Next
 
-1. Release 2.1.0 (stop-point: Daniel's hand).
-2. Phases 2 to 6 of `bright-coalescing-pond.md`: server, phone, decisions relay,
+1. Phases 2 to 6 of `bright-coalescing-pond.md`: server, phone, decisions relay,
    cutover (2.2.0), retire Firebase.
-3. Watch keep rate per source in the run reports; Awaiting-their-reply is 0 of 3
+2. Watch keep rate per source in the run reports; Awaiting-their-reply is 0 of 3
    so far.
-4. U12, U16, U18 and the reasoned sync items, when they bite.
+3. U12, U16, U18 and the reasoned sync items, when they bite.
 
 ## Open questions for Daniel
 
