@@ -1,7 +1,7 @@
 {
   "name": "floatnote",
-  "version": "1.4.0",
-  "description": "Floating notepad with checklist, habit tracker, configurable dashboard, and cross-device sync",
+  "version": "2.0.0",
+  "description": "Always-on-top to-do list: Today, Next, Waiting, Later, a morning pick, hotkey capture, sync, and a drop folder for Claude",
   "main": "main.js",
   "repository": {
     "type": "git",
@@ -10,19 +10,20 @@
   "homepage": "https://github.com/danieljpuusitalo/FloatNote",
   "scripts": {
     "start": "electron .",
+    "test": "node --test",
     "build": "electron-builder --win --x64 && electron-builder --win --arm64",
     "build:x64": "electron-builder --win --x64",
-    "build:arm64": "electron-builder --win --arm64"
+    "build:arm64": "electron-builder --win --arm64",
+    "install-skill": "node -e \"const fs=require('fs'),path=require('path'),d=path.join(require('os').homedir(),'.claude','skills','floatnote');fs.mkdirSync(d,{recursive:true});fs.copyFileSync('skills/floatnote/SKILL.md',path.join(d,'SKILL.md'));console.log('installed to '+d)\""
   },
   "keywords": [
     "electron",
     "desktop",
-    "notepad",
+    "to-do",
     "productivity",
     "floating",
-    "checklist",
-    "habit-tracker",
-    "dashboard"
+    "gtd",
+    "habit-tracker"
   ],
   "author": "Daniel J Puusitalo",
   "license": "MIT",
@@ -63,6 +64,8 @@
       "main.js",
       "preload.js",
       "index.html",
+      "core.js",
+      "sync.js",
       "package.json",
       "build/**"
     ]

@@ -1,174 +1,244 @@
 # FloatNote
 
-A lightweight floating desktop notepad that stays out of your way — until you need it.
+A small always-on-top window that holds today's to-dos, and the few things that
+come after them.
 
-FloatNote is a productivity scratchpad with notes, checklists, habit tracking, and a fully configurable dashboard — designed for fast thoughts and daily discipline without breaking your flow. Built with Electron as a single-file app.
+FloatNote 2 is a to-do system built around one rule: Today holds three things
+(you can set 1 to 5). Everything else waits in Next, Waiting or Later until a
+morning pick brings it forward. Capture is one line from anywhere, sync is
+per-record across machines, and anything that can write a file, Claude included,
+can suggest to-dos. Notes and Habits stay as secondary tabs.
 
----
-
-## Features
-
-**Cross-Device Sync** (v1.4)
-- Firebase Realtime Database sync via passphrase
-- Bidirectional merge with conflict resolution (timestamps, soft deletes)
-- Anonymous authentication — no account required
-
-**Configurable Dashboard** (v1.3)
-- 20 widget options — 16 stat blocks + 4 full-width panels
-- Toggle widgets on/off via gear menu
-- Drag-and-drop reordering of any widget
-- Stats: completed/pending/priority counts, today's tasks, overdue, habit streaks, XP level, daily averages
-- Full-width: stoic quote card, productivity chart, 28-day habit heatmap, per-habit weekly bars
-- Layout persists across sessions
-
-**Habit Tracker** (v1.3)
-- Dedicated tab with Tracker and Input & Performance views
-- Weekly check-off grid with drag-and-drop slot reordering
-- Custom schedules — daily or specific days of the week
-- Streak tracking — per-habit and overall day streaks
-- XP & leveling — gamified progression based on completions
-- 28-day heatmap and per-habit weekly completion bars
-- Archive habits without losing history
-
-**Rich Text Editor** (v1.2)
-- **Inline formatting** — Bold (`Ctrl+B`), Italic (`Ctrl+I`), Underline (`Ctrl+U`), Strikethrough (`Ctrl+Shift+S`)
-- **Headings** — Type `# `, `## `, `### ` for title/heading/subheading, or select text and press `Ctrl+H`
-- **Bullet lists** — Type `- ` or press `Ctrl+L` (works on multi-line selections)
-- **Numbered lists** — Type `1. ` to start; Enter auto-increments, empty Enter exits
-- **Checklists** — Type `[] ` to start, or `Ctrl+Shift+L` to toggle; click checkboxes for strikethrough
-- **Tab indent** — `Tab` / `Shift+Tab` to indent/outdent any list item (up to 3 levels)
-- **Inline code** — Wrap text in backticks: `` `code` ``
-- **Smart paste** — Pastes as plain text by default; `Ctrl+Shift+V` for rich paste
-- **Full undo/redo** — `Ctrl+Z` / `Ctrl+Y` works across all formatting operations
-- **Search** — `Ctrl+F` to search sections within notes
-
-**Checklist Tab** (v1.1)
-- Per-task priority flags (high/medium/low)
-- Deadline assignment with calendar picker and overdue alerts
-- Sort by date added or priority
-- Drag-and-drop reordering
-- Clean list button to clear completed tasks
-
-**Core**
-- Floating always-on-top window
-- Two categories: Professional and Personal (notes + checklist)
-- Light and dark themes (paperwhite toggle)
-- Right-click context menu for formatting
-- Elastic overscroll with smooth bounce effect on all scrollable panels
-- Custom themed scrollbars
-- Stoic & existentialist quote rotation (55+ quotes)
-- Onboarding with name and accent colour (purple, blue, green, pink, gold)
-- Persistent storage across sessions
+Windows only, built with Electron. The UI is a single `index.html`.
 
 ---
 
-## Getting Started
+## The four lists
+
+| List | What it holds |
+|---|---|
+| **Today** | What you will do today. Capped (3 by default, 1 to 5 in Settings). |
+| **Next** | Everything you mean to do. Dated items first, soonest first, then the newest. |
+| **Waiting** | Things someone else owes you. After a week the person's badge turns yellow: worth a nudge. |
+| **Later** | Someday. Out of sight, not deleted. |
+
+- A ticked item stays visible, struck through, for the rest of the day, below the
+  open ones. After 30 days it is removed; the streak and the done-today count keep
+  its record.
+- The Work / Personal filter at the top narrows every list. A to-do's dot shows
+  which one it is.
+- **Compact mode** (the green dot in the title bar) shrinks the window to just Today.
+
+## The morning pick
+
+On the first launch or focus of each day (never while you are typing):
+
+1. **Carry-overs.** Each unfinished Today item from yesterday comes up one at a
+   time: **Carry** it into today (`C`), send it back **To Next** (`N`), or
+   **Drop** it (`D`). A carried item wears a "2nd day", "3rd day" badge.
+2. **New from Claude.** Each suggestion from the drop folder, oldest first, with
+   what kind it is ("You promised", "Waiting on them", ...) and the sentence it
+   came from: **Keep** (`K`), straight onto **Today** (`T`), or **Drop** (`D`).
+   **Decide later** (`S`) leaves it; a suggestion not kept within 3 days expires.
+3. **Pick for today.** Next is listed, due items first. Pick until Today is full
+   (keys 1 to 9), then **Start day** (`Enter`).
+
+`Esc` closes it. "Pick from Next" under Today opens step 3 again at any time, and
+"N suggestions from Claude · Review" opens step 2.
+
+**Nothing rots.** A Next item untouched for 30 days slides to Later, and the first
+pick of the week says how many moved.
+
+If 5 or more Next items have gone untouched for 14 days, a **Still doing this?**
+card walks through them: Keep, Later, or Drop.
+
+## Capture
+
+Type into **Add a to-do** at the top, or press **Ctrl+Alt+Space** anywhere in
+Windows for the capture popup. If that key is taken, FloatNote falls back to
+Ctrl+Alt+N, then Ctrl+Shift+Alt+Space, and says so in Settings, where the hotkey
+can be changed.
+
+One line, with a few markers anywhere in it:
+
+| Type | Means |
+|---|---|
+| `@Anna` | Who it is with. The name stays in the text. |
+| `fri`, `tomorrow`, `12/10` | Due date, as the last word (an `@name` after it is fine). A weekday means the next one, today included. Day/month, year optional. |
+| `#p` | Personal (`#w` for work). |
+| `!` | Straight onto Today, if there is room. |
+| `~` | Waiting on someone. |
+
+`Send deck to @Anna fri !` → Today, due Friday, with Anna. `Review Friday notes`
+keeps its Friday, because the date only counts at the end. A hint under the box
+shows where the line will land before you press Enter.
+
+## Keyboard
+
+The to-do list works without the mouse. Press `?` on the list to see this.
+
+| On the list | |
+|---|---|
+| `↑` `↓` | Select a to-do |
+| `Space` or `X` | Tick or untick |
+| `Enter` or `E` | Edit |
+| `T` / `W` / `L` | Move to Today / Waiting / Later, or back to Next |
+| `P` | Switch work and personal |
+| `D` | Set the due date |
+| `Del` | Drop |
+| `Ctrl+Z` | Undo a drop (for 10 seconds) |
+| `Esc` | Clear the selection |
+| `N` or `/` | New to-do |
+| `K` `L` `D` | Keep, Later, Drop on the "Still doing this?" card, when nothing is selected |
+| `Ctrl+,` | Settings |
+
+After a tick or a move, the selection goes to the next open to-do, so `Space`
+`Space` `Space` works straight down Today.
+
+## Sync
+
+Settings → **Sync**: enter a passphrase, and every copy of FloatNote that uses the
+same one stays in step. Each to-do, note and habit syncs as its own record, so an
+edit on one machine never overwrites a different edit on another, and a change
+arriving while you type does not undo what you are typing.
+
+Firebase Realtime Database with anonymous sign-in; no account. Anyone who knows the
+passphrase can read the data, so make it long. v2 syncs to its own location, so a
+v1 copy on the same passphrase is left alone.
+
+## Drop folder
+
+Anything that can write a file can hand FloatNote to-dos. FloatNote watches
+`%APPDATA%\FloatNote\inbox\`. Each `*.json` file there is read within a second (and
+on the next launch if the app was closed), added, and deleted.
+
+```json
+{
+  "items": [
+    { "text": "Send Rui the revised cap table", "who": "Rui", "due": "2026-10-24",
+      "note": "\"I'll send it over by Friday.\"",
+      "source": { "url": "https://mail.google.com/mail/u/0/#all/abc", "label": "Re: cap table" } }
+  ],
+  "done": [
+    { "done": "<item id>", "why": "You sent the cap table on 15 Oct" }
+  ],
+  "replied": [
+    { "replied": "<waiting item id>", "why": "Rui replied on 16 Oct" }
+  ]
+}
+```
+
+- **`items`** are suggestions, reviewed in the morning pick (or with **Review**
+  under Today). They go to Next, or Waiting with `"list": "waiting"`. Other fields:
+  `kind` (`promise`, `ask`, `waiting`, `deadline`, `blocked`), `ctx` (`work` or
+  `personal`), `who`, `due` (`YYYY-MM-DD`), `note`, `source` (`{url, label}`), and
+  `key` (a stable id for dedupe). `"direct": true` means the person asked for this
+  item themselves. It skips review and may also use `later`, or `today` if Today
+  has room.
+- **`done`** entries put a "Looks done: ..." line on an open item, with **Done** and
+  **Not yet**. Nothing is ticked without a click.
+- **`replied`** entries bring a Waiting item back to Next with a "Replied: ..." badge.
+  Click the badge to clear it.
+- A top-level array of entries also works.
+- Write `name.json.tmp` and then rename it to `name.json`. Files ending in `.tmp` are
+  ignored.
+- Nothing comes back twice. `inbox-seen.json` remembers every suggestion for 180
+  days, kept or dropped, by `key` or by source url plus text. Text that matches an
+  open item is skipped.
+- Every file leaves a line in `inbox/processed.log`, listing what was added and
+  what was skipped and why. A file that is not valid JSON after 10 seconds, or is
+  over 1 MB, moves to `inbox/rejected/` with a `.why.txt` beside it.
+
+Every keep, drop, done, expiry and "not yet" on something Claude brought in is
+appended to `decisions.log` in the data folder (one JSON line each, 120 days kept),
+so the collector can learn what is worth suggesting. An optional
+`collector-preferences.md` beside it holds standing notes for the collector.
+
+The Claude Code skill in `skills/floatnote/` writes these files. It has two modes:
+capture ("add X to FloatNote") and collect, which reads sent mail and
+Awaiting-their-reply threads (read-only) for promises, waiting items, replies and
+things already done. `docs/INTAKE.md` is the design. Install it with
+`npm run install-skill`.
+
+## Notes and Habits
+
+- **Notes**: a rich-text scratchpad in two categories, Professional and Personal.
+  Markdown-style shortcuts (`# `, `- `, `1. `, `[] `, backticks), `Ctrl+B/I/U`,
+  `Ctrl+H` heading, `Ctrl+L` bullets, `Ctrl+Shift+L` checklist, `Tab` indent,
+  `Ctrl+F` to jump between sections, plain-text paste (`Ctrl+Shift+V` for rich).
+- **Habits**: a weekly check-off grid with per-habit schedules, streaks, a 4-week
+  heatmap, and archiving.
+
+## Settings
+
+The gear (or `Ctrl+,`): sync passphrase, how many things Today holds, the capture
+hotkey, keeping the window above others, and starting with Windows. The moon toggles the light (paperwhite) theme.
+
+## Your data
+
+Everything lives in `%APPDATA%\FloatNote\`: `floatnote-data.json` holds the state,
+`backups/` keeps one copy a day for 14 days, `inbox/` is the drop folder, and
+`decisions.log` is the feedback for the collector. v2 starts fresh: the first v2
+launch sets a v1 data file aside as `floatnote-data.v1.json`, keeps your name,
+colour and theme, and starts with empty lists, notes and habits.
+
+---
+
+## Development
 
 ```bash
 git clone https://github.com/danieljpuusitalo/FloatNote.git
 cd FloatNote
 npm install
-npm start
+npm test
 ```
 
-Build the Windows installer:
+`npm test` covers the logic in `core.js` and `sync.js`. **`npm start` uses your real
+data directory**, so for a dev run point it at a scratch copy:
 
-```bash
-npm run build
+```powershell
+$env:FLOATNOTE_DATA_DIR = "$env:TEMP\floatnote-dev"; npm start
 ```
+
+`npm run build` produces both Windows installers, x64 and arm64.
 
 ---
 
-## Keyboard Shortcuts
+## Version history
 
-| Shortcut | Action |
-|---|---|
-| `Ctrl+B` | Bold |
-| `Ctrl+I` | Italic |
-| `Ctrl+U` | Underline |
-| `Ctrl+Shift+S` | Strikethrough |
-| `Ctrl+H` | Heading from selection |
-| `Ctrl+L` | Toggle bullet list |
-| `Ctrl+Shift+L` | Toggle checklist |
-| `Tab` / `Shift+Tab` | Indent / outdent list item |
-| `Ctrl+F` | Search sections in notes |
-| `Ctrl+Z` | Undo |
-| `Ctrl+Y` | Redo |
+### v2.0.0
+- To-do system: Today / Next / Waiting / Later, a capped Today, the morning pick
+  with carry-overs, the "Still doing this?" card for stale items, compact mode
+- One-line capture with `@who`, dates, `#p`, `!`, `~`, and a global-hotkey popup
+- Keyboard-first list: select, tick, move, edit, date, drop, undo
+- Per-record sync, a settings screen, start with Windows
+- The drop folder and the `floatnote` Claude skill: suggestions reviewed in the
+  morning pick, "Looks done" hints, "replied" on Waiting, a decisions log
+- Suggestions expire after 3 days; Next items untouched for 30 days slide to Later
+- Daily backups; a fresh start, with v1 data set aside
+- Removed: the configurable dashboard and the quote rotation
 
-| Typing shortcut | Result |
-|---|---|
-| `# ` | Title |
-| `## ` | Heading |
-| `### ` | Subheading |
-| `- ` | Bullet point |
-| `1. ` | Numbered list |
-| `[] ` | Checklist item |
-| `` `text` `` | Inline code |
-
----
-
-## Version History
-
-### v1.4.0 — Cross-Device Sync & Audit
+### v1.4.0: Cross-Device Sync & Audit
 - Firebase Realtime Database sync with passphrase-based pairing
-- Bidirectional merge with timestamp-based conflict resolution
-- Anonymous authentication — no sign-up required
-- Paperwhite (light) theme toggle
-- Right-click context menu for formatting (bold, italic, bullets, headings, code, etc.)
-- Notes search (`Ctrl+F`) for jumping between sections
-- Codebase audit: fixed heatmap date calculation bug, removed dead CSS, consolidated dashboard styles
+- Paperwhite (light) theme, right-click formatting menu, notes search (`Ctrl+F`)
 
-### v1.3.1 — App Icon
-- Added app icon to installer and window title bar
+### v1.3.1: App Icon
 
-### v1.3 — Habit Tracker & Configurable Dashboard
-- Full habit tracking system with weekly grid, custom schedules, streaks, XP leveling, heatmap, and bar charts
-- Configurable dashboard with 20 toggleable widgets and drag-and-drop reordering
-- New stat widgets: priority counts, today/overdue tasks, habit metrics, XP, daily averages
-- New full-width widgets: 28-day habit heatmap, per-habit weekly completion bars
-- Elastic overscroll with smooth bounce on all scrollable panels
-- Custom themed scrollbars
-- Codebase cleanup: removed dead CSS/JS, optimised calculations
+### v1.3: Habit Tracker & Configurable Dashboard
 
-### v1.2 — Rich Text Editor
-- Apple Notes-style rich text editing with full inline formatting
-- Markdown-style auto-detect shortcuts for headings, lists, checklists, and code
-- Numbered lists with auto-increment and renumbering
-- Checklist items with checkbox toggle inside the notes editor
-- Tab indent/outdent for all list types (3 levels)
-- Plain text paste by default, rich paste with Ctrl+Shift+V
-- Custom undo/redo stack for consistent Ctrl+Z across all operations
-- Multi-line Ctrl+L bullet toggle
+### v1.2: Rich Text Editor
 
-### v1.1 — Sort, Deadlines & Quotes
-- Checklist sort by date added or priority
-- Per-task deadline assignment with calendar picker
-- Overdue deadline badges (red highlight)
-- 19 additional quotes from Nietzsche, Kierkegaard, and Sartre
+### v1.1: Sort, Deadlines & Quotes
 
-### v1.0.0 — Initial Release
-- Floating desktop notepad with notes and checklist tabs
-- Professional/Personal category toggle
-- Dashboard with completion stats and productivity chart
-- Onboarding overlay with name and accent colour personalization
-- Section headings and bullet points in notes
-- Checklist with priority flags, clean list, and date badges
-- Stoic quote rotation
-- Windows installer via electron-builder
+### v1.0.0: Initial Release
 
 ---
 
 ## Philosophy
 
-FloatNote is intentionally simple. One HTML file. No frameworks. No dependencies beyond Electron and Firebase. If it starts to feel like a full note-taking platform, something has gone wrong.
-
----
-
-## Contributing
-
-Pull requests are welcome. Keep it lightweight and focused.
-
----
+FloatNote should stay small. The UI is one HTML file with no framework; the logic
+worth testing lives beside it in `core.js`. If it starts to feel like a project
+manager, something has gone wrong.
 
 ## License
 

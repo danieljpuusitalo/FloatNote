@@ -1,359 +1,375 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, screen, shell, globalShortcut, powerMonitor } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const C = require('./core');
+const { createSync, firebaseBackend } = require('./sync');
 
-const DATA_PATH = path.join(app.getPath('userData'), 'floatnote-data.json');
-const SYNC_CONFIG_PATH = path.join(app.getPath('userData'), 'floatnote-sync.json');
+// FLOATNOTE_DATA_DIR runs a second, independent copy (sync testing, or a dry run
+// against a copy of real data). It must be set before anything reads userData,
+// and it also scopes the single-instance lock, so two copies can run side by side.
+if (process.env.FLOATNOTE_DATA_DIR) {
+  fs.mkdirSync(process.env.FLOATNOTE_DATA_DIR, { recursive: true });
+  app.setPath('userData', process.env.FLOATNOTE_DATA_DIR);
+}
 
-const DEFAULT_STATE = {
-  notes: { professional: '', personal: '' },
-  _notesLastEdit: { professional: 0, personal: 0 },
-  checklist: { professional: [], personal: [] },
-  _deletedChecklist: [],
-  completionLog: [],
-  preferences: null,
-  habits: [],
-  _deletedHabits: [],
-  habitLog: {}
-};
+const DATA_DIR = app.getPath('userData');
+const DATA_PATH = path.join(DATA_DIR, 'floatnote-data.json');
+const V1_BACKUP_PATH = path.join(DATA_DIR, 'floatnote-data.v1.json');
+const CLOCK_PATH = path.join(DATA_DIR, 'floatnote-clock.json');
+const WINDOW_PATH = path.join(DATA_DIR, 'floatnote-window.json');
+const SYNC_PATH = path.join(DATA_DIR, 'floatnote-sync.json');
+const BACKUP_DIR = path.join(DATA_DIR, 'backups');
+const BACKUP_KEEP = 14;
+const SYNCED_WRITE_MS = 60 * 60 * 1000;
+const INBOX_DIR = path.join(DATA_DIR, 'inbox');
+const INBOX_SEEN_PATH = path.join(DATA_DIR, 'inbox-seen.json');
+const DECISIONS_PATH = path.join(DATA_DIR, 'decisions.log');
 
-function loadData() {
+// ---------- files ----------
+
+function readJson(file) {
+  try { return JSON.parse(fs.readFileSync(file, 'utf-8')); } catch { return undefined; }
+}
+
+// Write to a temp file, flush it to disk, then rename over the target, so a
+// crash or power cut mid-write can never leave a half-written data file. The
+// temp name is unique, so two writes of the same file cannot share one.
+let tmpSeq = 0;
+function writeJsonAtomic(file, data) {
+  const tmp = file + '.' + process.pid + '.' + (++tmpSeq) + '.tmp';
+  const fd = fs.openSync(tmp, 'w');
   try {
-    const data = JSON.parse(fs.readFileSync(DATA_PATH, 'utf-8'));
-    if (Array.isArray(data.checklist)) {
-      return {
-        notes: { professional: data.notes || '', personal: '' },
-        checklist: { professional: data.checklist, personal: [] },
-        completionLog: data.completionLog || []
-      };
-    }
-    return { ...DEFAULT_STATE, ...data };
-  } catch {
-    return { ...DEFAULT_STATE };
-  }
-}
-
-function saveData(data) {
-  fs.writeFileSync(DATA_PATH, JSON.stringify(data, null, 2));
-  pushToFirebase(data);
-}
-
-// --- Firebase Sync ---
-const { initializeApp } = require('firebase/app');
-const { getAuth, signInAnonymously } = require('firebase/auth');
-const { getDatabase, ref, set, onValue } = require('firebase/database');
-
-const firebaseConfig = {
-  apiKey: "AIzaSyC1GVm6VsEkMjTJ3Dm3ntMSEejtC_AdnPU",
-  authDomain: "floatnote-app.firebaseapp.com",
-  databaseURL: "https://floatnote-app-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "floatnote-app",
-  storageBucket: "floatnote-app.firebasestorage.app",
-  messagingSenderId: "212035028924",
-  appId: "1:212035028924:web:3d4ff5da274a0758db0db9"
-};
-
-let firebaseApp = null;
-let dbRef = null;
-let isRemoteUpdate = false;
-let lastPushedJson = '';
-
-// --- Merge helpers ---
-function itemKey(i) { return i.text + '|' + (i.addedAt || ''); }
-
-function mergeChecklistArrays(local, remote, deletedKeys) {
-  if (!local || !local.length) local = [];
-  if (!remote || !remote.length) remote = [];
-  const merged = [];
-  const seen = new Set();
-  // Process local items first
-  local.forEach(item => {
-    const key = itemKey(item);
-    if (deletedKeys && deletedKeys.has(key)) return; // soft-deleted
-    seen.add(key);
-    merged.push({ ...item });
-  });
-  // Merge remote items
-  remote.forEach(item => {
-    const key = itemKey(item);
-    if (deletedKeys && deletedKeys.has(key)) return; // soft-deleted
-    if (!seen.has(key)) {
-      seen.add(key);
-      merged.push({ ...item });
-    } else {
-      // Merge done status using doneAt timestamp
-      const idx = merged.findIndex(i => itemKey(i) === key);
-      if (idx >= 0) {
-        const localDoneAt = merged[idx].doneAt || 0;
-        const remoteDoneAt = item.doneAt || 0;
-        if (remoteDoneAt > localDoneAt) {
-          merged[idx].done = item.done;
-          merged[idx].doneAt = item.doneAt;
-        }
-        // Merge priority/deadline using updatedAt
-        const localUpd = merged[idx].updatedAt || 0;
-        const remoteUpd = item.updatedAt || 0;
-        if (remoteUpd > localUpd) {
-          merged[idx].priority = item.priority;
-          merged[idx].deadline = item.deadline;
-          merged[idx].updatedAt = item.updatedAt;
-        }
-      }
-    }
-  });
-  return merged;
-}
-
-function mergeNote(local, remote, localTs, remoteTs) {
-  if (!local && !remote) return '';
-  if (!local) return remote;
-  if (!remote) return local;
-  // Use timestamps if available, fall back to keeping longer
-  if (localTs && remoteTs) return remoteTs >= localTs ? remote : local;
-  return remote.length >= local.length ? remote : local;
-}
-
-function mergeObjects(local, remote) {
-  return { ...(local || {}), ...(remote || {}) };
-}
-
-function mergeHabits(local, remote, deletedIds) {
-  if (!local || !local.length) local = [];
-  if (!remote || !remote.length) remote = [];
-  const merged = [];
-  const seen = new Set();
-  // Process local habits
-  local.forEach(h => {
-    if (deletedIds && deletedIds.has(h.id)) return;
-    seen.add(h.id);
-    merged.push({ ...h });
-  });
-  // Merge remote habits
-  remote.forEach(h => {
-    if (deletedIds && deletedIds.has(h.id)) return;
-    if (!seen.has(h.id)) {
-      seen.add(h.id);
-      merged.push({ ...h });
-    } else {
-      // Update if remote is newer
-      const idx = merged.findIndex(m => m.id === h.id);
-      if (idx >= 0) {
-        const localUpd = merged[idx].updatedAt || 0;
-        const remoteUpd = h.updatedAt || 0;
-        if (remoteUpd > localUpd) {
-          merged[idx] = { ...h };
-        }
-      }
-    }
-  });
-  return merged;
-}
-
-function mergeCompletionLog(local, remote) {
-  if (!local || !local.length) return remote || [];
-  if (!remote || !remote.length) return local || [];
-  const merged = [...local];
-  const keys = new Set(local.map(e => e.date + '|' + e.category));
-  remote.forEach(e => {
-    const key = e.date + '|' + e.category;
-    if (!keys.has(key)) {
-      merged.push(e);
-      keys.add(key);
-    }
-  });
-  return merged;
-}
-
-function mergePreferences(local, remote) {
-  if (!local) return remote || null;
-  if (!remote) return local || null;
-  return { ...local, ...remote };
-}
-
-function mergeState(local, remote) {
-  const localNoteTs = local._notesLastEdit || {};
-  const remoteNoteTs = remote._notesLastEdit || {};
-  // Build deleted sets from both sides
-  const deletedChecklist = new Set([
-    ...(local._deletedChecklist || []),
-    ...(remote._deletedChecklist || [])
-  ]);
-  const deletedHabits = new Set([
-    ...(local._deletedHabits || []),
-    ...(remote._deletedHabits || [])
-  ]);
-
-  return {
-    notes: {
-      professional: mergeNote(
-        local.notes && local.notes.professional,
-        remote.notes && remote.notes.professional,
-        localNoteTs.professional, remoteNoteTs.professional),
-      personal: mergeNote(
-        local.notes && local.notes.personal,
-        remote.notes && remote.notes.personal,
-        localNoteTs.personal, remoteNoteTs.personal)
-    },
-    _notesLastEdit: {
-      professional: Math.max(localNoteTs.professional || 0, remoteNoteTs.professional || 0),
-      personal: Math.max(localNoteTs.personal || 0, remoteNoteTs.personal || 0)
-    },
-    checklist: {
-      professional: mergeChecklistArrays(
-        local.checklist && local.checklist.professional,
-        remote.checklist && remote.checklist.professional,
-        deletedChecklist),
-      personal: mergeChecklistArrays(
-        local.checklist && local.checklist.personal,
-        remote.checklist && remote.checklist.personal,
-        deletedChecklist)
-    },
-    _deletedChecklist: [...deletedChecklist],
-    completionLog: mergeCompletionLog(local.completionLog, remote.completionLog),
-    preferences: mergePreferences(local.preferences, remote.preferences),
-    habits: mergeHabits(local.habits, remote.habits, deletedHabits),
-    _deletedHabits: [...deletedHabits],
-    habitLog: mergeObjects(local.habitLog, remote.habitLog),
-    dashboardConfig: remote.dashboardConfig || local.dashboardConfig
-  };
-}
-
-function loadSyncConfig() {
+    fs.writeSync(fd, JSON.stringify(data, null, 2));
+    fs.fsyncSync(fd);
+  } finally { fs.closeSync(fd); }
   try {
-    return JSON.parse(fs.readFileSync(SYNC_CONFIG_PATH, 'utf-8'));
-  } catch {
-    return {};
-  }
-}
-
-function saveSyncConfig(config) {
-  fs.writeFileSync(SYNC_CONFIG_PATH, JSON.stringify(config, null, 2));
-}
-
-function initFirebaseSync() {
-  const config = loadSyncConfig();
-  if (!config.passphrase) return;
-
-  try {
-    firebaseApp = initializeApp(firebaseConfig);
-    const auth = getAuth(firebaseApp);
-
-    signInAnonymously(auth).then(() => {
-      console.log('[FloatNote Sync] Signed in anonymously');
-      const db = getDatabase(firebaseApp);
-      dbRef = ref(db, 'sync/' + config.passphrase);
-
-      let firstConnect = true;
-
-      onValue(dbRef, (snapshot) => {
-        const remote = snapshot.val();
-
-        let localData = {};
-        try { localData = JSON.parse(fs.readFileSync(DATA_PATH, 'utf-8')); } catch {}
-
-        // First connect: always merge with remote (or push local if remote empty)
-        if (firstConnect) {
-          firstConnect = false;
-          if (!remote || !remote._meta) {
-            pushToFirebase(localData);
-            return;
-          }
-          // Merge local with remote on first connect
-          console.log('[FloatNote Sync] First connect — merging with remote');
-          isRemoteUpdate = true;
-          const merged = mergeState(localData, remote);
-          const toSave = { ...merged, _meta: { lastModified: Date.now(), lastDevice: 'electron' } };
-          fs.writeFileSync(DATA_PATH, JSON.stringify(toSave, null, 2));
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('remote-update', merged);
-          }
-          pushToFirebase(toSave);
-          isRemoteUpdate = false;
-          return;
-        }
-
-        if (!remote || !remote._meta) return;
-
-        // Skip if this is our own push echoing back
-        if (isRemoteUpdate) return;
-        const remoteJson = JSON.stringify(remote);
-        if (remoteJson === lastPushedJson) return;
-
-        // Only apply if remote is from a different device
-        if (remote._meta.lastDevice === 'electron') return;
-
-        console.log('[FloatNote Sync] Merging remote state from', remote._meta.lastDevice);
-        isRemoteUpdate = true;
-
-        // Merge instead of replace
-        const merged = mergeState(localData, remote);
-        const toSave = { ...merged, _meta: { lastModified: Date.now(), lastDevice: 'electron' } };
-        fs.writeFileSync(DATA_PATH, JSON.stringify(toSave, null, 2));
-
-        // Notify renderer
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('remote-update', merged);
-        }
-        isRemoteUpdate = false;
-      });
-    }).catch(err => {
-      console.error('[FloatNote Sync] Auth error:', err);
-    });
+    fs.renameSync(tmp, file);
   } catch (err) {
-    console.error('[FloatNote Sync] Init error:', err);
+    // Windows can refuse the rename while another process holds the file open.
+    fs.copyFileSync(tmp, file);
+    fs.unlinkSync(tmp);
   }
 }
 
-function pushToFirebase(data) {
-  if (!dbRef || isRemoteUpdate) return;
-
-  const now = Date.now();
-  const payload = {
-    notes: data.notes || {},
-    _notesLastEdit: data._notesLastEdit || {},
-    checklist: data.checklist || {},
-    _deletedChecklist: data._deletedChecklist || [],
-    completionLog: data.completionLog || [],
-    preferences: data.preferences || null,
-    habits: data.habits || [],
-    _deletedHabits: data._deletedHabits || [],
-    habitLog: data.habitLog || {},
-    dashboardConfig: data.dashboardConfig || null,
-    _meta: {
-      lastModified: now,
-      lastDevice: 'electron'
-    }
-  };
-
-  lastPushedJson = JSON.stringify(payload);
-
-  const pushAttempt = (retries) => {
-    set(dbRef, payload).catch(err => {
-      console.error('[FloatNote Sync] Push error:', err);
-      if (retries > 0) {
-        setTimeout(() => pushAttempt(retries - 1), 2000);
-      }
-    });
-  };
-  pushAttempt(2);
+// One copy of the data file per calendar day, the newest BACKUP_KEEP kept.
+function dailyBackup() {
+  if (!fs.existsSync(DATA_PATH)) return;
+  fs.mkdirSync(BACKUP_DIR, { recursive: true });
+  const target = path.join(BACKUP_DIR, 'floatnote-data-' + C.dateStr(new Date()) + '.json');
+  if (fs.existsSync(target)) return;
+  fs.copyFileSync(DATA_PATH, target);
+  const old = fs.readdirSync(BACKUP_DIR).filter(f => /^floatnote-data-\d{4}-\d{2}-\d{2}\.json$/.test(f)).sort();
+  for (const f of old.slice(0, Math.max(0, old.length - BACKUP_KEEP))) fs.unlinkSync(path.join(BACKUP_DIR, f));
 }
 
-// --- IPC: Sync config ---
-ipcMain.handle('get-sync-config', () => loadSyncConfig());
-ipcMain.handle('set-sync-passphrase', (_event, passphrase) => {
-  const config = { passphrase };
-  saveSyncConfig(config);
-  initFirebaseSync();
-  return config;
-});
+function newestBackup() {
+  if (!fs.existsSync(BACKUP_DIR)) return undefined;
+  const files = fs.readdirSync(BACKUP_DIR).filter(f => f.endsWith('.json')).sort().reverse();
+  for (const f of files) {
+    const data = readJson(path.join(BACKUP_DIR, f));
+    if (data && !C.isV1(data)) return data;
+  }
+  return undefined;
+}
 
-let mainWindow;
+// ---------- state ----------
+
+let state = null;   // the last state the renderer saved (or the loaded one)
+let clock = {};     // per-record timestamps, see core.stamp
+let lastSync = null; // when sync last succeeded, kept in the clock file
+
+function writeClock() {
+  writeJsonAtomic(CLOCK_PATH, C.clockFile(clock, lastSync));
+}
+
+function loadState() {
+  const exists = fs.existsSync(DATA_PATH);
+  const file = C.parseClockFile(readJson(CLOCK_PATH));
+  const plan = C.planLoad({
+    data: readJson(DATA_PATH),
+    exists,
+    clock: file,
+    v2Ran: fs.existsSync(CLOCK_PATH) || fs.existsSync(V1_BACKUP_PATH),
+    backup: newestBackup
+  });
+  // Unreadable (or a v1 file back after v2 ran): keep the file for inspection.
+  if (plan.keepCopy) fs.copyFileSync(DATA_PATH, path.join(DATA_DIR, 'floatnote-data.corrupt-' + Date.now() + '.json'));
+  if (plan.source === 'setAside') {
+    // The first v2 launch over v1 data starts fresh (docs/INTAKE.md): the v1
+    // file is kept, untouched, as floatnote-data.v1.json, and nothing is migrated.
+    if (!fs.existsSync(V1_BACKUP_PATH)) fs.copyFileSync(DATA_PATH, V1_BACKUP_PATH);
+    state = plan.raw;
+    writeJsonAtomic(DATA_PATH, state);
+  } else {
+    state = plan.raw === undefined ? C.emptyState() : C.normalizeState(plan.raw);
+  }
+  clock = file ? file.clock : {};
+  lastSync = file ? file.lastSync : null;
+  // A recovered state must not out-date or delete what other devices hold.
+  if (plan.suspect) C.recoverClock(clock, C.toRecords(state));
+  else C.stamp(clock, C.toRecords(state), Date.now());
+  writeClock();
+  return state;
+}
+
+// On by default; off is for screen shares, where a window that floats over
+// everything else gets in the way.
+function applyOnTop(prefs) {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setAlwaysOnTop(!(prefs && prefs.onTop === false));
+}
+
+let appliedLoginItem;
+function applyLoginItem(prefs) {
+  const want = !!(prefs && prefs.launchAtLogin);
+  if (!app.isPackaged || appliedLoginItem === want) return;
+  app.setLoginItemSettings({ openAtLogin: want });
+  appliedLoginItem = want;
+}
+
+// seenSeq: the last remote patch the renderer had applied when it saved. Any
+// patch after that is re-applied first, so a save already in flight when a
+// remote change arrived cannot stamp the old value as newer and push it back.
+// Only onto records the renderer left as they were before the patch: one it
+// changed is a newer local edit, and this save stamps it.
+function saveState(data, seenSeq) {
+  state = C.normalizeState(data);
+  if (typeof seenSeq === 'number') {
+    unseen = unseen.filter(e => e.seq > seenSeq);
+    for (const e of unseen) C.applyPatchIfUnchanged(state, e.patch, e.before);
+  }
+  dailyBackup();
+  writeJsonAtomic(DATA_PATH, state);
+  const changed = C.stamp(clock, C.toRecords(state), Date.now());
+  if (changed.length) writeClock();
+  if (sync) sync.push(changed);
+  applyLoginItem(state.preferences);
+  applyOnTop(state.preferences);
+  const wanted = state.preferences.hotkey || C.DEFAULT_PREFS.hotkey;
+  if (wanted !== wantedHotkey && !hotkeyPaused) registerHotkey(wanted);
+  return changed;
+}
+
+// ---------- sync ----------
+
+let sync = null;
+let patchSeq = 0;
+let unseen = [];   // remote patches sent to the renderer, newer than its last save
+
+function readPassphrase() {
+  const c = readJson(SYNC_PATH);
+  return c && typeof c.passphrase === 'string' ? c.passphrase.trim() : '';
+}
+
+function send(channel, ...args) {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, ...args);
+}
+
+// What the settings screen shows. Never includes the passphrase itself.
+function info() {
+  return {
+    sync: sync ? sync.status() : { mode: 'off' },
+    configured: !!readPassphrase(),
+    hotkey,
+    wantedHotkey,
+    packaged: app.isPackaged
+  };
+}
+
+function setupSync() {
+  sync = createSync({
+    backend: firebaseBackend(),
+    clock,
+    getRecords: () => C.toRecords(state),
+    onRemote: (patch) => {
+      const before = C.recordHashes(state, Object.keys(patch));
+      C.applyPatch(state, patch);
+      writeJsonAtomic(DATA_PATH, state);
+      writeClock();
+      sendPatch(patch, before);
+    },
+    getLastSync: () => lastSync,
+    onSynced: (t) => {
+      // Not on every push: an hour is far inside the tombstone window.
+      if (lastSync !== null && t - lastSync < SYNCED_WRITE_MS) return;
+      lastSync = t;
+      writeClock();
+    },
+    onStatus: () => send('info', info())
+  });
+  sync.start(readPassphrase());
+  // A start that failed offline retries on its own; waking from sleep is the
+  // likeliest moment the network is back.
+  if (powerMonitor) powerMonitor.on('resume', () => sync.retryNow());
+}
+
+// Hand the renderer a change main made itself, the same way as a remote one:
+// it applies the patch only to records it has not edited since.
+function sendPatch(patch, before) {
+  if (!Object.keys(patch).length) return;
+  const seq = ++patchSeq;
+  unseen.push({ seq, patch, before });
+  send('remote-patch', patch, seq, before);
+}
+
+// ---------- inbox: suggestions dropped in by Claude ----------
+//
+// Any *.json in <data dir>/inbox is read, turned into suggested items or
+// "looks done" hints (core.ingestInbox), and deleted. Writers write a .tmp and
+// rename it, but a file caught mid-write is retried rather than rejected until
+// it is INBOX_SETTLE_MS old. Every file leaves a line in inbox/processed.log;
+// one that cannot be used moves to inbox/rejected/ with the reason beside it.
+// inbox-seen.json remembers what was suggested, so a later sweep of the same
+// mail does not bring back something already kept or dropped.
+
+const INBOX_SETTLE_MS = 10000;
+const INBOX_MAX_BYTES = 1024 * 1024;
+const INBOX_LOG_MAX_BYTES = 512 * 1024;
+let inboxTimer = null;
+let inboxRetry = null;
+
+function inboxLog(entry) {
+  const file = path.join(INBOX_DIR, 'processed.log');
+  try {
+    if (fs.existsSync(file) && fs.statSync(file).size > INBOX_LOG_MAX_BYTES) fs.renameSync(file, file + '.1');
+    fs.appendFileSync(file, JSON.stringify(Object.assign({ at: new Date().toISOString() }, entry)) + '\n');
+  } catch (err) { console.warn('FloatNote: inbox log', err.message); }
+}
+
+function rejectInboxFile(name, reason) {
+  const dir = path.join(INBOX_DIR, 'rejected');
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    const target = path.join(dir, Date.now() + '-' + name);
+    fs.renameSync(path.join(INBOX_DIR, name), target);
+    fs.writeFileSync(target + '.why.txt', reason + '\n');
+  } catch (err) { console.warn('FloatNote: inbox reject', err.message); }
+  inboxLog({ file: name, rejected: reason });
+}
+
+function processInbox() {
+  if (!state) return;
+  let names;
+  try {
+    fs.mkdirSync(INBOX_DIR, { recursive: true });
+    names = fs.readdirSync(INBOX_DIR).filter(f => /\.json$/i.test(f)).sort();
+  } catch (err) { return; }
+  if (!names.length) return;
+
+  const seen = C.pruneSeen(readJson(INBOX_SEEN_PATH) || {}, Date.now());
+  const before = C.recordHashes(state, Object.keys(C.toRecords(state)));
+  const added = [];
+  const direct = [];
+  const hinted = [];
+  const replied = [];
+  let retry = false;
+  for (const name of names) {
+    const file = path.join(INBOX_DIR, name);
+    let stat, payload;
+    try { stat = fs.statSync(file); } catch { continue; }
+    if (!stat.isFile()) continue;
+    if (stat.size > INBOX_MAX_BYTES) { rejectInboxFile(name, 'larger than 1 MB'); continue; }
+    try {
+      // PowerShell writes a byte-order mark; JSON.parse does not accept one.
+      payload = JSON.parse(fs.readFileSync(file, 'utf-8').replace(/^﻿/, ''));
+    } catch (err) {
+      if (Date.now() - stat.mtimeMs < INBOX_SETTLE_MS) { retry = true; continue; }
+      rejectInboxFile(name, 'not valid JSON: ' + err.message);
+      continue;
+    }
+    const r = C.ingestInbox(state, payload, Date.now(), seen);
+    added.push(...r.added);
+    direct.push(...r.direct);
+    hinted.push(...r.hinted);
+    replied.push(...r.replied);
+    try { fs.unlinkSync(file); } catch (err) { console.warn('FloatNote: inbox delete', err.message); }
+    inboxLog({ file: name, added: r.added.length, direct: r.direct.length, hinted: r.hinted.length, replied: r.replied.length, skipped: r.skipped });
+  }
+  writeJsonAtomic(INBOX_SEEN_PATH, seen);
+  if (retry) { clearTimeout(inboxRetry); inboxRetry = setTimeout(processInbox, INBOX_SETTLE_MS + 500); }
+  if (!added.length && !hinted.length && !replied.length) return;
+
+  const records = C.toRecords(state);
+  const patch = {};
+  const was = {};
+  for (const id of new Set([...added, ...hinted, ...replied])) {
+    const p = 'items/' + id;
+    patch[p] = records[p];
+    if (p in before) was[p] = before[p];
+  }
+  dailyBackup();
+  writeJsonAtomic(DATA_PATH, state);
+  const changed = C.stamp(clock, records, Date.now());
+  if (changed.length) writeClock();
+  if (sync) sync.push(changed);
+  sendPatch(patch, was);
+  send('inbox', { added: added.length, direct: direct.length, hinted: hinted.length, replied: replied.length });
+}
+
+function scheduleInbox() {
+  clearTimeout(inboxTimer);
+  inboxTimer = setTimeout(processInbox, 300);
+}
+
+// fs.watch is the fast path; the poll covers the cases it misses (it can stop
+// firing after sleep, and is not guaranteed on every filesystem).
+function watchInbox() {
+  fs.mkdirSync(INBOX_DIR, { recursive: true });
+  try {
+    fs.watch(INBOX_DIR, (_type, name) => { if (!name || /\.json$/i.test(name)) scheduleInbox(); })
+      .on('error', err => console.warn('FloatNote: inbox watch', err.message));
+  } catch (err) { console.warn('FloatNote: inbox watch', err.message); }
+  setInterval(processInbox, 60000);
+}
+
+// ---------- window ----------
+
+let mainWindow = null;
+let tray = null;
+let quitting = false;
+
+function savedBounds() {
+  const b = readJson(WINDOW_PATH);
+  if (!b || typeof b.x !== 'number' || typeof b.width !== 'number') return null;
+  // Only reuse the position if it is still on a connected display.
+  const visible = screen.getAllDisplays().some(d => {
+    const a = d.workArea;
+    return b.x < a.x + a.width - 40 && b.x + b.width > a.x + 40 && b.y >= a.y - 10 && b.y < a.y + a.height - 40;
+  });
+  return visible ? b : { width: b.width, height: b.height };
+}
+
+let boundsTimer = null;
+let compactFrom = null; // full-size bounds while the window is shrunk to Today
+function rememberBounds() {
+  clearTimeout(boundsTimer);
+  boundsTimer = setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isMinimized()) {
+      const b = mainWindow.getBounds();
+      // In compact mode keep the full size on disk, so leaving compact (or a
+      // restart) gets the real window back. Only the position follows.
+      if (compactFrom) { b.width = compactFrom.width; b.height = compactFrom.height; }
+      writeJsonAtomic(WINDOW_PATH, b);
+    }
+  }, 500);
+}
+
+function showWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return createWindow();
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
 
 function createWindow() {
+  const b = savedBounds() || {};
   mainWindow = new BrowserWindow({
-    width: 460,
-    height: 650,
-    alwaysOnTop: true,
+    x: b.x,
+    y: b.y,
+    width: b.width || 460,
+    height: b.height || 650,
+    minWidth: 300,
+    minHeight: 120,
+    alwaysOnTop: !(state && state.preferences && state.preferences.onTop === false),
     frame: false,
     transparent: false,
     resizable: true,
@@ -368,20 +384,248 @@ function createWindow() {
   });
 
   mainWindow.loadFile('index.html');
+  lockNavigation(mainWindow);
+  mainWindow.once('ready-to-show', () => mainWindow.show());
+  // Windows sign-out or shutdown: save the edit still in the renderer's debounce.
+  mainWindow.on('session-end', () => mainWindow.webContents.send('flush'));
+  mainWindow.on('moved', rememberBounds);
+  mainWindow.on('resized', rememberBounds);
 
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
+  // Closing hides to the tray; quitting is explicit (tray menu).
+  mainWindow.on('close', (e) => {
+    if (!quitting) {
+      e.preventDefault();
+      mainWindow.hide();
+    }
   });
 }
 
-app.whenReady().then(() => {
-  createWindow();
-  initFirebaseSync();
+// Links (a to-do's source) open in the browser, never inside FloatNote.
+function lockNavigation(win) {
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  win.webContents.on('will-navigate', (e) => e.preventDefault());
+}
+
+// ---------- hotkey capture ----------
+//
+// A one-line popup from anywhere. It is index.html#capture in a second,
+// pre-created window, so it opens instantly. Enter hands the text to the main
+// window, which owns the state and does the adding; the popup never saves.
+
+let captureWin = null;
+let hotkey = null;
+
+function createCaptureWindow() {
+  captureWin = new BrowserWindow({
+    width: 560,
+    height: 92,
+    useContentSize: true,
+    frame: false,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    show: false,
+    backgroundColor: '#0f0f1a',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+  captureWin.loadFile('index.html', { hash: 'capture' });
+  lockNavigation(captureWin);
+  captureWin.on('blur', () => captureWin.hide());
+  captureWin.on('close', (e) => {
+    if (!quitting) {
+      e.preventDefault();
+      captureWin.hide();
+    }
+  });
+}
+
+function toggleCapture() {
+  if (!captureWin || captureWin.isDestroyed()) createCaptureWindow();
+  if (captureWin.isVisible()) return captureWin.hide();
+  // Centre on whichever screen the mouse is on, a little above the middle.
+  const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
+  const [w] = captureWin.getSize();
+  captureWin.setPosition(Math.round(area.x + (area.width - w) / 2), Math.round(area.y + area.height * 0.28));
+  captureWin.show();
+  captureWin.focus();
+  captureWin.webContents.send('capture-show');
+}
+
+// Another app can already own the wanted key (the Claude desktop app holds
+// Ctrl+Alt+Space). Rather than have no capture key, fall back, and say in the
+// tray which key is live.
+const HOTKEY_FALLBACKS = ['Ctrl+Alt+N', 'Ctrl+Shift+Alt+Space'];
+
+let wantedHotkey = null;
+let hotkeyPaused = false;   // while the settings screen records a new key
+
+function registerHotkey(wanted) {
+  if (hotkey) globalShortcut.unregister(hotkey);
+  hotkey = null;
+  wantedHotkey = wanted;
+  for (const accel of [wanted, ...HOTKEY_FALLBACKS.filter(k => k !== wanted)]) {
+    let ok = false;
+    try { ok = globalShortcut.register(accel, toggleCapture); } catch (e) { ok = false; }
+    if (ok) { hotkey = accel; break; }
+  }
+  if (hotkey !== wanted) console.warn('FloatNote: hotkey ' + wanted + ' is taken; using ' + (hotkey || 'none'));
+  updateTray();
+  send('info', info());
+  return hotkey;
+}
+
+function updateTray() {
+  if (!tray) return;
+  tray.setToolTip(hotkey ? 'FloatNote (capture: ' + hotkey + ')' : 'FloatNote (no capture hotkey available)');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Show FloatNote', click: showWindow },
+    { label: 'Quick capture', accelerator: hotkey || undefined, registerAccelerator: false, click: toggleCapture },
+    { type: 'separator' },
+    { label: 'Quit', click: () => app.quit() }
+  ]));
+}
+
+function createTray() {
+  tray = new Tray(path.join(__dirname, 'build', 'icon.ico'));
+  updateTray();
+  tray.on('click', () => {
+    if (mainWindow && mainWindow.isVisible() && mainWindow.isFocused()) mainWindow.hide();
+    else showWindow();
+  });
+}
+
+// ---------- lifecycle ----------
+
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', showWindow);
+
+  app.whenReady().then(() => {
+    loadState();
+    trimDecisions();
+    applyLoginItem(state.preferences);
+    createWindow();
+    createTray();
+    createCaptureWindow();
+    registerHotkey(state.preferences.hotkey || C.DEFAULT_PREFS.hotkey);
+    setupSync();
+    watchInbox();
+    // Anything that arrived while FloatNote was closed: wait for the window, so
+    // the "Claude suggested" note has somewhere to show.
+    mainWindow.webContents.once('did-finish-load', () => setTimeout(processInbox, 1500));
+  });
+
+  app.on('will-quit', () => globalShortcut.unregisterAll());
+
+  // The tray keeps the app alive with no windows open.
+  app.on('window-all-closed', () => {});
+
+  // The renderer debounces saves by 300ms. Before quitting, ask it to flush the
+  // pending one, and wait for it (bounded, so a hung renderer cannot block quit).
+  let flushed = false;
+  app.on('before-quit', (e) => {
+    quitting = true;
+    if (flushed || !mainWindow || mainWindow.isDestroyed()) return;
+    e.preventDefault();
+    const done = () => {
+      if (flushed) return;
+      flushed = true;
+      app.quit();
+    };
+    ipcMain.once('flushed', done);
+    setTimeout(done, 1500);
+    mainWindow.webContents.send('flush');
+  });
+}
+
+// ---------- IPC ----------
+
+ipcMain.handle('load-data', (event) => {
+  // The main window starts from current state, so no earlier patch is unseen.
+  if (mainWindow && event.sender === mainWindow.webContents) unseen = [];
+  return state || loadState();
+});
+ipcMain.handle('save-data', (_event, data, seenSeq) => { saveState(data, seenSeq); });
+ipcMain.handle('get-info', () => info());
+
+// The decisions log (docs/INTAKE.md rule 6): one JSON line per keep, drop,
+// done, expired or not-yet on something the collector brought in. It stays in
+// the data dir, never in the repo. Entries older than DECISIONS_KEEP_DAYS are
+// dropped at startup, so the file stays small.
+const DECISIONS_KEEP_DAYS = 120;
+ipcMain.on('log-decisions', (_e, entries) => {
+  if (!Array.isArray(entries)) return;
+  const lines = entries.slice(0, 200)
+    .filter(x => x && typeof x === 'object' && C.DECISIONS.includes(x.d))
+    .map(x => JSON.stringify(x).slice(0, 4000) + '\n');
+  if (!lines.length) return;
+  try { fs.appendFileSync(DECISIONS_PATH, lines.join('')); } catch (err) { console.warn('FloatNote: decisions log', err.message); }
 });
 
-app.on('window-all-closed', () => app.quit());
+function trimDecisions() {
+  try {
+    if (!fs.existsSync(DECISIONS_PATH)) return;
+    const cutoff = Date.now() - DECISIONS_KEEP_DAYS * C.DAY_MS;
+    const lines = fs.readFileSync(DECISIONS_PATH, 'utf-8').split('\n').filter(Boolean);
+    const keep = lines.filter(l => { try { return JSON.parse(l).t >= cutoff; } catch { return false; } });
+    if (keep.length < lines.length) fs.writeFileSync(DECISIONS_PATH, keep.map(l => l + '\n').join(''));
+  } catch (err) { console.warn('FloatNote: decisions trim', err.message); }
+}
 
-ipcMain.handle('load-data', () => loadData());
-ipcMain.handle('save-data', (_event, data) => saveData(data));
-ipcMain.on('minimize', () => mainWindow.minimize());
-ipcMain.on('close', () => mainWindow.close());
+// Firebase keys cannot hold . # $ [ ] /, and the passphrase is part of the key.
+// It is also the only thing between the data and anyone who guesses it.
+ipcMain.handle('set-passphrase', (_event, raw) => {
+  const p = typeof raw === 'string' ? raw.trim() : '';
+  if (p && p.length < 8) return { ok: false, error: 'Use at least 8 characters.' };
+  if (/[.#$\[\]\/]/.test(p)) return { ok: false, error: 'The characters . # $ [ ] / are not allowed.' };
+  writeJsonAtomic(SYNC_PATH, { passphrase: p });
+  if (sync) sync.start(p);
+  send('info', info());
+  return { ok: true };
+});
+
+ipcMain.on('pause-hotkey', (_e, on) => {
+  hotkeyPaused = !!on;
+  if (hotkeyPaused) { if (hotkey) globalShortcut.unregister(hotkey); hotkey = null; updateTray(); send('info', info()); }
+  else registerHotkey((state && state.preferences.hotkey) || C.DEFAULT_PREFS.hotkey);
+});
+ipcMain.on('minimize', () => mainWindow && mainWindow.minimize());
+ipcMain.on('close', () => mainWindow && mainWindow.hide());
+ipcMain.on('quit', () => app.quit());
+
+ipcMain.on('capture-submit', (_e, raw) => {
+  if (typeof raw === 'string' && raw.trim() && mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('captured', raw.slice(0, 2000));
+  }
+  if (captureWin && !captureWin.isDestroyed()) captureWin.hide();
+});
+ipcMain.on('capture-hide', () => captureWin && !captureWin.isDestroyed() && captureWin.hide());
+
+// Compact mode: shrink to the height of the Today list, and restore the full
+// size on the way out. The renderer reports the height it needs.
+ipcMain.on('set-compact', (_e, on, height) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const b = mainWindow.getBounds();
+  if (on) {
+    if (!compactFrom) compactFrom = b;
+    const h = Math.max(60, Math.min(Math.round(Number(height) || 0), compactFrom.height));
+    mainWindow.setMinimumSize(200, 60);
+    mainWindow.setBounds({ x: b.x, y: b.y, width: b.width, height: h });
+  } else if (compactFrom) {
+    mainWindow.setMinimumSize(300, 120);
+    mainWindow.setBounds({ x: b.x, y: b.y, width: compactFrom.width, height: compactFrom.height });
+    compactFrom = null;
+    rememberBounds();
+  }
+});
