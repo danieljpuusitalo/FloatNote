@@ -648,6 +648,10 @@
     .pick-slid { font-size: 11px; color: var(--text-muted); margin: -6px 0 10px; }
     .card-btn:disabled { opacity: 0.35; cursor: default; }
     .sugg-line { font-size: 11.5px; color: var(--text-secondary); padding: 4px 2px 6px; }
+    .run-line { font-size: 11px; color: var(--text-muted); padding: 2px 2px 6px; }
+    .run-line.warn { color: var(--yellow); }
+    .paperwhite .run-line.warn { color: #85651a; }
+    .pick-card .run-line { padding: 0; margin: -6px 0 10px; }
 
     /* Settings */
     .settings-overlay { z-index: 920; }
@@ -2613,6 +2617,9 @@
       const nSugg = FN.pendingSuggestions(state).length;
       if (nSugg) html += '<div class="sugg-line">' + nSugg + (nSugg === 1 ? ' suggestion' : ' suggestions') +
         ' from Claude · <button class="link-btn" data-act="review">Review</button></div>';
+      // The collector's own line: only a problem shows here; a good run shows in the pick.
+      const run = FN.runStatus(state, new Date(now));
+      if (run && run.level === 'warn') html += '<div class="run-line warn">' + escapeHtml(run.text) + '</div>';
       if (todayItems.length) {
         html += todayItems.map(i => itemHtml(i, today, now)).join('');
         if (!open && pickCandidates().length) {
@@ -3161,7 +3168,9 @@
       const card = document.getElementById('pick-card');
       const now = Date.now();
       const today = FN.dateStr(now);
-      const slid = pick.slid ? '<div class="pick-slid">' + slidText(pick.slid) + '</div>' : '';
+      const run = pick.mode === 'morning' ? FN.runStatus(state, new Date(now)) : null;
+      const slid = (pick.slid ? '<div class="pick-slid">' + slidText(pick.slid) + '</div>' : '') +
+        (run ? '<div class="run-line' + (run.level === 'warn' ? ' warn' : '') + '">' + escapeHtml(run.text) + '</div>' : '');
       let html;
       pick.shown = true;
       pick.showing = null;

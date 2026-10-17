@@ -63,7 +63,7 @@ FYIs, newsletters, reading and ideas are out. Ideas belong in Notes.
 | Direct capture: hotkey, capture box, any Claude session | built |
 | Gmail **sent mail**: promises, Waiting, closing items | **approved, standing, read-only** |
 | Gmail threads labelled **Awaiting-their-reply**: Waiting, and "replied" | **approved, standing, read-only** |
-| Project checkpoints ("blocked on Daniel") via `~/.claude/ops/registry.json` | proposed; local files, no approval issue |
+| Project checkpoints ("blocked on Daniel") via `~/.claude/ops/registry.json` | built (2.1.0); local files, no approval issue |
 | Telegram capture via the existing bot | proposed |
 | Gmail received mail (asks) | **not approved**; ask again once sent mail has earned its keep rate |
 | Meeting transcripts (notetaker) | **not approved**; the Tactiq connector is not authenticated |
@@ -74,10 +74,13 @@ approval covers only the two Gmail scopes above, for this collector only.
 
 ## Cadence and spend
 
-The collector runs **by hand for the first week**: on request, with cost per run
-and keep rate recorded. Daniel then decides whether to schedule it. If scheduled,
-it runs at about 07:15 before the morning pick, as a windowless Task Scheduler
-task (`~/.claude/ops/bin/hidden.exe`, absolute `claude` path, output to a log).
+**Scheduled from 2026-10-17** (Daniel's call, skipping the hand-run week): weekdays
+at 07:15, before the morning pick, as the windowless task `FloatNoteCollector`
+(`tools/collector/`: `~/.claude/ops/bin/hidden.exe`, absolute `claude` path, a
+$2 budget cap per run, logs in `collector-logs/`). Every run reports itself, cost
+included, as a `run` entry, so the pick shows what it found, or that it failed, or
+that it never ran. Keep rate per kind is still in each run's report; a source under
+about 30% gets tightened or switched off.
 
 ## Fresh start
 

@@ -261,6 +261,7 @@ function processInbox() {
   const direct = [];
   const hinted = [];
   const replied = [];
+  let ran = false;
   let retry = false;
   for (const name of names) {
     const file = path.join(INBOX_DIR, name);
@@ -281,18 +282,20 @@ function processInbox() {
     direct.push(...r.direct);
     hinted.push(...r.hinted);
     replied.push(...r.replied);
+    if (r.run) ran = true;
     try { fs.unlinkSync(file); } catch (err) { console.warn('FloatNote: inbox delete', err.message); }
-    inboxLog({ file: name, added: r.added.length, direct: r.direct.length, hinted: r.hinted.length, replied: r.replied.length, skipped: r.skipped });
+    inboxLog({ file: name, added: r.added.length, direct: r.direct.length, hinted: r.hinted.length, replied: r.replied.length, run: r.run, skipped: r.skipped });
   }
   writeJsonAtomic(INBOX_SEEN_PATH, seen);
   if (retry) { clearTimeout(inboxRetry); inboxRetry = setTimeout(processInbox, INBOX_SETTLE_MS + 500); }
-  if (!added.length && !hinted.length && !replied.length) return;
+  if (!added.length && !hinted.length && !replied.length && !ran) return;
 
   const records = C.toRecords(state);
   const patch = {};
   const was = {};
-  for (const id of new Set([...added, ...hinted, ...replied])) {
-    const p = 'items/' + id;
+  const paths = [...new Set([...added, ...hinted, ...replied])].map(id => 'items/' + id);
+  if (ran) paths.push('meta/lastRun');
+  for (const p of paths) {
     patch[p] = records[p];
     if (p in before) was[p] = before[p];
   }

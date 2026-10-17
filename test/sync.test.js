@@ -446,3 +446,36 @@ test('lastSync is reported as sync succeeds', async () => {
   await settle(S);
   assert.equal(a.lastSync, T);
 });
+
+test('a refused push after start is retried, and sync comes back on', async () => {
+  const S = fakeServer(), b = device(S);
+  await b.sync.start(PASS);
+  const backend = S.client();
+  let refuse = 1;
+  const update = backend.update;
+  backend.update = async (root, map) => { if (refuse > 0) { refuse--; throw new Error('network-request-failed'); } return update(root, map); };
+  const a = device(S, undefined, { backend });
+  await a.sync.start(PASS);
+  await settle(S);
+  assert.equal(a.sync.status().mode, 'on');
+  await a.add('Invented while the network blipped');
+  assert.equal(a.sync.status().mode, 'error');
+  assert.equal(liveTimers(a).length, 1, 'a retry is scheduled');
+  await fireRetry(S, a);
+  assert.equal(a.sync.status().mode, 'on');
+  assert.deepEqual(live(b.state), ['Invented while the network blipped']);
+});
+
+test('negative control: without the retry firing, the refused edit never arrives', async () => {
+  const S = fakeServer(), b = device(S);
+  await b.sync.start(PASS);
+  const backend = S.client();
+  const update = backend.update;
+  let refuse = 1;
+  backend.update = async (root, map) => { if (refuse > 0) { refuse--; throw new Error('network-request-failed'); } return update(root, map); };
+  const a = device(S, undefined, { backend });
+  await a.sync.start(PASS);
+  await a.add('Invented and stuck');
+  await settle(S);
+  assert.deepEqual(live(b.state), []);
+});
