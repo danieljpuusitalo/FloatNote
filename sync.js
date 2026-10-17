@@ -29,9 +29,19 @@ function message(err) {
   return (err && (err.message || err.code)) || String(err);
 }
 
+// A failed start is retried after RETRY_MIN_MS, doubling up to RETRY_MAX_MS.
+const RETRY_MIN_MS = 5000;
+const RETRY_MAX_MS = 5 * 60 * 1000;
+
 function createSync(opts) {
   const { backend, clock, getRecords, onRemote, onStatus } = opts;
   const now = opts.now || Date.now;
+  // lastSync is when this device last synced for real: getLastSync reads it and
+  // onSynced reports it, so main can keep it on disk. Timers are injectable.
+  const getLastSync = opts.getLastSync || (() => null);
+  const onSynced = opts.onSynced || (() => {});
+  const setTimer = opts.setTimer || ((fn, ms) => setTimeout(fn, ms));
+  const clearTimer = opts.clearTimer || ((id) => clearTimeout(id));
   // The record kinds this device sends and receives. The phone page shows only
   // items, so it syncs only items and completions and cannot clobber notes.
   const kinds = opts.kinds || C.RECORD_KINDS;
@@ -42,10 +52,26 @@ function createSync(opts) {
   let unsubs = [];
   let pending = null;   // remote records decided but not yet handed to onRemote
   let status = { mode: 'off', lastSync: null, error: null };
+  let wanted = null;    // the passphrase to keep trying with after a failed start
+  let retryTimer = null;
+  let retryDelay = RETRY_MIN_MS;
 
   function setStatus(s) {
     status = Object.assign({}, status, s);
+    if (s.lastSync) onSynced(s.lastSync);
     if (onStatus) onStatus(status);
+  }
+
+  function cancelRetry() {
+    if (retryTimer !== null) clearTimer(retryTimer);
+    retryTimer = null;
+  }
+
+  function scheduleRetry() {
+    cancelRetry();
+    const delay = retryDelay;
+    retryDelay = Math.min(retryDelay * 2, RETRY_MAX_MS);
+    retryTimer = setTimer(() => { retryTimer = null; if (wanted) run(wanted); }, delay);
   }
 
   function push(paths) {
@@ -86,8 +112,22 @@ function createSync(opts) {
     }
   }
 
-  async function start(passphrase) {
-    stop();
+  function start(passphrase) {
+    retryDelay = RETRY_MIN_MS;
+    return run(passphrase);
+  }
+
+  // Try again now, if sync is wanted and not running: the machine woke up or the
+  // network came back. A no-op once a start has got through.
+  function retryNow() {
+    if (!wanted || root) return Promise.resolve();
+    retryDelay = RETRY_MIN_MS;
+    return run(wanted);
+  }
+
+  async function run(passphrase) {
+    teardown();
+    wanted = passphrase || null;
     const myGen = gen;
     if (!passphrase) return;
     setStatus({ mode: 'connecting', error: null });
@@ -103,6 +143,7 @@ function createSync(opts) {
         for (const [key, wire] of Object.entries(snap[kind] || {})) remote[C.keyToPath(kind, key)] = wire;
       }
       const patch = {};
+      for (const path of C.adoptRemoteWhenDormant(clock, remote, getLastSync(), now(), synced)) patch[path] = null;
       for (const [path, wire] of Object.entries(remote)) {
         const d = C.applyRemote(clock, path, wire);
         if (d) patch[path] = d.value;
@@ -125,11 +166,18 @@ function createSync(opts) {
       if (myGen === gen) {
         root = null;
         setStatus({ mode: 'error', error: message(err) });
+        scheduleRetry();
       }
     }
   }
 
   function stop() {
+    wanted = null;
+    teardown();
+  }
+
+  function teardown() {
+    cancelRetry();
     gen++;
     for (const off of unsubs) { try { off(); } catch (e) { /* already gone */ } }
     unsubs = [];
@@ -141,6 +189,7 @@ function createSync(opts) {
   return {
     start,
     stop,
+    retryNow,
     push,
     status: () => status
   };

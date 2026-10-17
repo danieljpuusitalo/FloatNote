@@ -15,7 +15,7 @@
   const STALE_DAYS = 14;
   const TRIAGE_THRESHOLD = 5;
   const DONE_RETENTION_DAYS = 30;
-  const TOMBSTONE_DAYS = 60;
+  const TOMBSTONE_DAYS = 365;
   const DEFAULT_PREFS = { todayCap: 3, hotkey: 'Ctrl+Alt+Space', compact: false, launchAtLogin: false };
 
   // ---------- dates (local calendar days as YYYY-MM-DD) ----------
@@ -452,6 +452,30 @@
     return out;
   }
 
+  // What a launch loads, and whether the clock that goes with it can be trusted.
+  //   data    the parsed data file (undefined when unreadable)
+  //   exists  whether the data file is on disk
+  //   clock   parseClockFile of the clock file, or null when missing or corrupt
+  //   v2Ran   v2 has run in this data dir (a clock file or the v1 copy is there)
+  //   backup  () → the newest readable v2 backup, or undefined
+  // source: read | migrate | fresh | recovered. suspect means the state may be
+  // older or smaller than what was last synced, so the clock must not stamp it
+  // as new (see recoverClock). keepCopy: set the bad data file aside first.
+  function planLoad(o) {
+    const usable = o.data !== null && typeof o.data === 'object';
+    const unreadable = o.exists && !usable;
+    // A v1-shaped file after v2 has run is a restore or a v1 copy writing it;
+    // migrating it again would wipe the v2 state on every device.
+    const stale = usable && isV1(o.data) && o.v2Ran;
+    const gone = !o.exists && o.v2Ran;
+    if (unreadable || stale || gone) {
+      return { source: 'recovered', raw: o.backup(), suspect: true, keepCopy: o.exists };
+    }
+    if (!usable) return { source: 'fresh', raw: undefined, suspect: false, keepCopy: false };
+    if (isV1(o.data)) return { source: 'migrate', raw: o.data, suspect: false, keepCopy: false };
+    return { source: 'read', raw: o.data, suspect: !o.clock, keepCopy: false };
+  }
+
   function isV1(data) {
     return !!data && (Array.isArray(data) || (typeof data === 'object' && data.schemaVersion !== 2));
   }
@@ -630,6 +654,56 @@
     return changed;
   }
 
+  // The clock for a state that is suspect (recovered from a backup or empty, or
+  // loaded without its clock). Nothing is stamped as new and nothing becomes a
+  // tombstone: a record the clock knows with the same content keeps its time, any
+  // other gets t 0 so every remote version beats it (a local-only record is
+  // still pushed, as the remote has none), and a clock entry for a record the
+  // state lacks is dropped, so the remote copy comes back instead of being deleted.
+  function recoverClock(clock, records) {
+    for (const [path, value] of Object.entries(records)) {
+      const prev = clock[path];
+      const h = hash(value);
+      if (prev && !prev.d && prev.h === h) continue;
+      clock[path] = { h, t: 0 };
+    }
+    for (const path of Object.keys(clock)) {
+      if (!(path in records) && !clock[path].d) delete clock[path];
+    }
+  }
+
+  // The clock file holds the clock and the time of the last successful sync (it
+  // decides whether this device is dormant, see adoptRemoteWhenDormant). The
+  // first version was the bare clock, which has no "clock" key (paths hold a "/").
+  function parseClockFile(raw) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    if (raw.clock && typeof raw.clock === 'object') {
+      return { clock: raw.clock, lastSync: typeof raw.lastSync === 'number' ? raw.lastSync : null };
+    }
+    return { clock: raw, lastSync: null };
+  }
+
+  function clockFile(clock, lastSync) {
+    return { clock, lastSync: typeof lastSync === 'number' ? lastSync : null };
+  }
+
+  // A device that last synced longer ago than tombstones are kept cannot tell
+  // "never reached the server" from "deleted, and the tombstone has been purged".
+  // For the records it has not touched since that sync (t at or before it) the
+  // server is right, so a record missing there is dropped locally instead of
+  // being pushed back. Returns the dropped paths; the caller removes them from
+  // its state. synced(path) limits it to the kinds this device syncs.
+  function adoptRemoteWhenDormant(clock, remote, lastSync, now, synced) {
+    if (typeof lastSync !== 'number' || now - lastSync <= TOMBSTONE_DAYS * DAY_MS) return [];
+    const dropped = [];
+    for (const [path, c] of Object.entries(clock)) {
+      if (c.d || path in remote || c.t > lastSync || (synced && !synced(path))) continue;
+      delete clock[path];
+      dropped.push(path);
+    }
+    return dropped;
+  }
+
   // The wire format for one record: { j: JSON text, t } or a tombstone
   // { t, d: true }. The value travels as a string because Firebase silently
   // drops empty strings and empty objects and turns arrays into maps.
@@ -719,7 +793,7 @@
     ingestSuggestions, ingestInbox, suggestionKey, pruneSeen,
     emptyState, normalizeState, isV1, migrateV1,
     toRecords, applyPath, applyPatch, recordHashes, applyPatchIfUnchanged,
-    stamp, toWire, wireValue, applyRemote, localIsNewer, newerThanRemote, purgeTombstones,
+    planLoad, stamp, recoverClock, parseClockFile, clockFile, adoptRemoteWhenDormant, TOMBSTONE_DAYS, toWire, wireValue, applyRemote, localIsNewer, newerThanRemote, purgeTombstones,
     encodeKey, decodeKey, pathToKey, keyToPath
   };
 });

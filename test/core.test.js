@@ -505,9 +505,105 @@ test('applyRemote: only strictly newer wins; own echoes are no-ops', () => {
 });
 
 test('purgeTombstones drops only old tombstones', () => {
-  const clock = { a: { t: T - 61 * DAY, d: true }, b: { t: T - 10 * DAY, d: true }, c: { h: 'x', t: T - 90 * DAY } };
+  const clock = { a: { t: T - 366 * DAY, d: true }, b: { t: T - 90 * DAY, d: true }, c: { h: 'x', t: T - 400 * DAY } };
   assert.deepEqual(C.purgeTombstones(clock, T), ['a']);
   assert.deepEqual(Object.keys(clock).sort(), ['b', 'c']);
+});
+
+// ---------- launch recovery: a suspect state must not delete or out-date ----------
+
+const v2Data = () => ({ schemaVersion: 2, items: { a: { id: 'a' } } });
+const v1Data = () => ({ checklist: { professional: [{ text: 'Invented v1 task', done: false }], personal: [] } });
+const goodClock = () => ({ clock: {}, lastSync: null });
+const noBackup = () => undefined;
+
+test('planLoad: an intact data file and clock load as they are', () => {
+  const p = C.planLoad({ data: v2Data(), exists: true, clock: goodClock(), v2Ran: true, backup: noBackup });
+  assert.equal(p.source, 'read');
+  assert.equal(p.suspect, false);
+});
+
+test('planLoad: an unreadable data file is recovered from the backup and is suspect', () => {
+  const backup = () => v2Data();
+  const p = C.planLoad({ data: undefined, exists: true, clock: goodClock(), v2Ran: true, backup });
+  assert.deepEqual([p.source, p.suspect, p.keepCopy], ['recovered', true, true]);
+  assert.deepEqual(p.raw, v2Data());
+  const none = C.planLoad({ data: undefined, exists: true, clock: goodClock(), v2Ran: true, backup: noBackup });
+  assert.deepEqual([none.source, none.suspect, none.raw], ['recovered', true, undefined]);
+});
+
+test('planLoad: a data file that vanished after v2 ran is recovered, not treated as a first run', () => {
+  const p = C.planLoad({ data: undefined, exists: false, clock: goodClock(), v2Ran: true, backup: noBackup });
+  assert.deepEqual([p.source, p.suspect, p.keepCopy], ['recovered', true, false]);
+});
+
+test('planLoad: a lost clock with an intact data file is suspect', () => {
+  const p = C.planLoad({ data: v2Data(), exists: true, clock: null, v2Ran: true, backup: noBackup });
+  assert.deepEqual([p.source, p.suspect], ['read', true]);
+});
+
+test('planLoad: the genuine first run and the first v1 migration are not suspect', () => {
+  const first = C.planLoad({ data: undefined, exists: false, clock: null, v2Ran: false, backup: noBackup });
+  assert.deepEqual([first.source, first.suspect], ['fresh', false]);
+  const mig = C.planLoad({ data: v1Data(), exists: true, clock: null, v2Ran: false, backup: noBackup });
+  assert.deepEqual([mig.source, mig.suspect], ['migrate', false]);
+});
+
+test('planLoad: a v1 file reappearing after v2 ran is not migrated again', () => {
+  const backup = () => v2Data();
+  const p = C.planLoad({ data: v1Data(), exists: true, clock: goodClock(), v2Ran: true, backup });
+  assert.deepEqual([p.source, p.suspect, p.keepCopy], ['recovered', true, true]);
+  assert.deepEqual(p.raw, v2Data());
+});
+
+test('recoverClock: no tombstones, no new timestamps, absent records forgotten', () => {
+  const kept = { id: 'k', text: 'Invented kept' };
+  const clock = {
+    'items/k': { h: C.hash(kept), t: 500 },
+    'items/old': { h: C.hash({ id: 'old' }), t: 400 },
+    'items/gone': { h: null, t: 300, d: true }
+  };
+  const records = { 'items/k': kept, 'items/local': { id: 'local' }, 'items/back': { id: 'back' } };
+  clock['items/back'] = { h: 'older-content', t: 450 };
+  C.recoverClock(clock, records);
+  assert.deepEqual(clock['items/k'], { h: C.hash(kept), t: 500 }, 'unchanged keeps its time');
+  assert.equal(clock['items/local'].t, 0, 'unknown record loses to any remote version');
+  assert.equal(clock['items/back'].t, 0, 'a differing record loses too');
+  assert.equal(clock['items/old'], undefined, 'absent record is forgotten, not tombstoned');
+  assert.deepEqual(clock['items/gone'], { h: null, t: 300, d: true }, 'existing tombstones stay');
+  // And a later save has nothing to tombstone.
+  assert.deepEqual(C.stamp(clock, records, T), []);
+});
+
+test('negative control: stamping a recovered state tombstones what it lacks', () => {
+  const clock = { 'items/old': { h: C.hash({ id: 'old' }), t: 400 } };
+  const changed = C.stamp(clock, {}, T);
+  assert.deepEqual(changed, ['items/old']);
+  assert.equal(clock['items/old'].d, true);
+});
+
+test('clock file: round trips, and the bare first-version clock still reads', () => {
+  const clock = { 'items/a': { h: 'x', t: 5 } };
+  assert.deepEqual(C.parseClockFile(C.clockFile(clock, 99)), { clock, lastSync: 99 });
+  assert.deepEqual(C.parseClockFile(clock), { clock, lastSync: null });
+  assert.equal(C.parseClockFile(undefined), null);
+  assert.equal(C.parseClockFile('junk'), null);
+});
+
+test('adoptRemoteWhenDormant: drops untouched records the server lacks, only when dormant', () => {
+  const mk = () => ({
+    'items/untouched': { h: 'x', t: T - 500 * DAY },
+    'items/edited': { h: 'y', t: T - 10 * DAY },
+    'items/onserver': { h: 'z', t: T - 500 * DAY },
+    'items/dead': { h: null, t: T - 500 * DAY, d: true }
+  });
+  const remote = { 'items/onserver': { t: T - 500 * DAY, j: '{}' } };
+  const last = T - 400 * DAY;
+  const clock = mk();
+  assert.deepEqual(C.adoptRemoteWhenDormant(clock, remote, last, T), ['items/untouched']);
+  assert.deepEqual(Object.keys(clock).sort(), ['items/dead', 'items/edited', 'items/onserver']);
+  assert.deepEqual(C.adoptRemoteWhenDormant(mk(), remote, T - 30 * DAY, T), [], 'recent sync: nothing dropped');
+  assert.deepEqual(C.adoptRemoteWhenDormant(mk(), remote, null, T), [], 'never synced: nothing dropped');
 });
 
 test('firebase keys: unsafe characters round-trip', () => {

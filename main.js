@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, screen, shell, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, screen, shell, globalShortcut, powerMonitor } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const C = require('./core');
@@ -20,6 +20,7 @@ const WINDOW_PATH = path.join(DATA_DIR, 'floatnote-window.json');
 const SYNC_PATH = path.join(DATA_DIR, 'floatnote-sync.json');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 const BACKUP_KEEP = 14;
+const SYNCED_WRITE_MS = 60 * 60 * 1000;
 const INBOX_DIR = path.join(DATA_DIR, 'inbox');
 const INBOX_SEEN_PATH = path.join(DATA_DIR, 'inbox-seen.json');
 
@@ -59,7 +60,7 @@ function newestBackup() {
   const files = fs.readdirSync(BACKUP_DIR).filter(f => f.endsWith('.json')).sort().reverse();
   for (const f of files) {
     const data = readJson(path.join(BACKUP_DIR, f));
-    if (data) return data;
+    if (data && !C.isV1(data)) return data;
   }
   return undefined;
 }
@@ -68,26 +69,37 @@ function newestBackup() {
 
 let state = null;   // the last state the renderer saved (or the loaded one)
 let clock = {};     // per-record timestamps, see core.stamp
+let lastSync = null; // when sync last succeeded, kept in the clock file
+
+function writeClock() {
+  writeJsonAtomic(CLOCK_PATH, C.clockFile(clock, lastSync));
+}
 
 function loadState() {
-  let raw = readJson(DATA_PATH);
-  if (raw === undefined && fs.existsSync(DATA_PATH)) {
-    // Unreadable: keep the broken file for inspection and fall back to a backup.
-    fs.copyFileSync(DATA_PATH, path.join(DATA_DIR, 'floatnote-data.corrupt-' + Date.now() + '.json'));
-    raw = newestBackup();
-  }
-  if (raw === undefined) {
-    state = C.emptyState();
-  } else if (C.isV1(raw)) {
-    if (!fs.existsSync(V1_BACKUP_PATH) && fs.existsSync(DATA_PATH)) fs.copyFileSync(DATA_PATH, V1_BACKUP_PATH);
-    state = C.migrateV1(raw, Date.now());
+  const exists = fs.existsSync(DATA_PATH);
+  const file = C.parseClockFile(readJson(CLOCK_PATH));
+  const plan = C.planLoad({
+    data: readJson(DATA_PATH),
+    exists,
+    clock: file,
+    v2Ran: fs.existsSync(CLOCK_PATH) || fs.existsSync(V1_BACKUP_PATH),
+    backup: newestBackup
+  });
+  // Unreadable (or a v1 file back after v2 ran): keep the file for inspection.
+  if (plan.keepCopy) fs.copyFileSync(DATA_PATH, path.join(DATA_DIR, 'floatnote-data.corrupt-' + Date.now() + '.json'));
+  if (plan.source === 'migrate') {
+    if (!fs.existsSync(V1_BACKUP_PATH)) fs.copyFileSync(DATA_PATH, V1_BACKUP_PATH);
+    state = C.migrateV1(plan.raw, Date.now());
     writeJsonAtomic(DATA_PATH, state);
   } else {
-    state = C.normalizeState(raw);
+    state = plan.raw === undefined ? C.emptyState() : C.normalizeState(plan.raw);
   }
-  clock = readJson(CLOCK_PATH) || {};
-  C.stamp(clock, C.toRecords(state), Date.now());
-  writeJsonAtomic(CLOCK_PATH, clock);
+  clock = file ? file.clock : {};
+  lastSync = file ? file.lastSync : null;
+  // A recovered state must not out-date or delete what other devices hold.
+  if (plan.suspect) C.recoverClock(clock, C.toRecords(state));
+  else C.stamp(clock, C.toRecords(state), Date.now());
+  writeClock();
   return state;
 }
 
@@ -113,7 +125,7 @@ function saveState(data, seenSeq) {
   dailyBackup();
   writeJsonAtomic(DATA_PATH, state);
   const changed = C.stamp(clock, C.toRecords(state), Date.now());
-  if (changed.length) writeJsonAtomic(CLOCK_PATH, clock);
+  if (changed.length) writeClock();
   if (sync) sync.push(changed);
   applyLoginItem(state.preferences);
   const wanted = state.preferences.hotkey || C.DEFAULT_PREFS.hotkey;
@@ -156,12 +168,22 @@ function setupSync() {
       const before = C.recordHashes(state, Object.keys(patch));
       C.applyPatch(state, patch);
       writeJsonAtomic(DATA_PATH, state);
-      writeJsonAtomic(CLOCK_PATH, clock);
+      writeClock();
       sendPatch(patch, before);
+    },
+    getLastSync: () => lastSync,
+    onSynced: (t) => {
+      // Not on every push: an hour is far inside the tombstone window.
+      if (lastSync !== null && t - lastSync < SYNCED_WRITE_MS) return;
+      lastSync = t;
+      writeClock();
     },
     onStatus: () => send('info', info())
   });
   sync.start(readPassphrase());
+  // A start that failed offline retries on its own; waking from sleep is the
+  // likeliest moment the network is back.
+  if (powerMonitor) powerMonitor.on('resume', () => sync.retryNow());
 }
 
 // Hand the renderer a change main made itself, the same way as a remote one:
@@ -259,7 +281,7 @@ function processInbox() {
   dailyBackup();
   writeJsonAtomic(DATA_PATH, state);
   const changed = C.stamp(clock, records, Date.now());
-  if (changed.length) writeJsonAtomic(CLOCK_PATH, clock);
+  if (changed.length) writeClock();
   if (sync) sync.push(changed);
   sendPatch(patch, was);
   send('inbox', { added: added.length, direct: direct.length, hinted: hinted.length });
