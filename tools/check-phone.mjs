@@ -4,6 +4,8 @@
 // server builds, pairs through Settings with the setup key, and works the list by
 // tapping. Every tap lands on the element it aims at or the check fails.
 //   node tools/check-phone.mjs        (needs: cd server && npm install, and Edge)
+// Against a deployed Worker instead of the local server: set FLOATNOTE_CHECK_URL
+// and FLOATNOTE_SETUP_KEY (read from a file, never typed into a command line).
 // Screenshots go to the scratch dir it prints.
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, existsSync } from 'node:fs';
@@ -16,14 +18,17 @@ import { randomBytes } from 'node:crypto';
 const repo = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const C = createRequire(import.meta.url)(repo + '/core.js');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const PORT = 8798, URL_ = 'http://127.0.0.1:' + PORT;
-const KEY = 'invented-' + randomBytes(12).toString('hex');
+const REMOTE = process.env.FLOATNOTE_CHECK_URL;
+const PORT = 8798, URL_ = REMOTE ? REMOTE.replace(/\/$/, '') : 'http://127.0.0.1:' + PORT;
+const KEY = REMOTE ? process.env.FLOATNOTE_SETUP_KEY : 'invented-' + randomBytes(12).toString('hex');
+if (REMOTE && !KEY) throw new Error('FLOATNOTE_CHECK_URL needs FLOATNOTE_SETUP_KEY');
 const EDGE = ['C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Microsoft/Edge/Application/msedge.exe'].find(existsSync);
 const work = mkdtempSync(join(tmpdir(), 'fn-phone-'));
 console.log('scratch: ' + work);
 
-const srv = spawn(process.execPath, [repo + '/server/dev-server.mjs', String(PORT), join(work, 'server.sqlite')], { env: { ...process.env, SETUP_KEY: KEY }, stdio: 'ignore' });
+const srv = REMOTE ? null : spawn(process.execPath, [repo + '/server/dev-server.mjs', String(PORT), join(work, 'server.sqlite')], { env: { ...process.env, SETUP_KEY: KEY }, stdio: 'ignore' });
 for (let i = 0; i < 40; i++) { await sleep(150); try { await fetch(URL_ + '/api/sync'); break; } catch {} }
+console.log('server: ' + URL_);
 
 async function cdp(wsUrl) {
   const ws = new WebSocket(wsUrl);
@@ -69,10 +74,29 @@ desk.notes.professional = '<div>Invented desktop note, must survive the phone jo
 const deskDir = join(work, 'desktop');
 execFileSync(process.execPath, [repo + '/tools/pair-device.mjs', URL_, 'Invented desktop'], { env: { ...process.env, FLOATNOTE_SETUP_KEY: KEY, FLOATNOTE_DATA_DIR: deskDir } });
 writeFileSync(join(deskDir, 'floatnote-data.json'), JSON.stringify(desk));
+// A clock, as a desktop that has synced before has: its records are newer than
+// anything an earlier run left on a deployed server. (A device with no clock is
+// the t 0 case, covered in test/server.test.js.)
+const deskClock = {};
+C.stamp(deskClock, C.toRecords(desk), T0);
+writeFileSync(join(deskDir, 'floatnote-clock.json'), JSON.stringify(C.clockFile(deskClock, null)));
 const electron = spawn(repo + '/node_modules/electron/dist/electron.exe', [repo, '--remote-debugging-port=9371'],
   { env: { ...process.env, FLOATNOTE_DATA_DIR: deskDir, FLOATNOTE_SYNC: 'server' }, stdio: 'ignore' });
 const D = await cdp((await target(9371, t => t.type === 'page' && !t.url.includes('#capture'))).webSocketDebuggerUrl);
 check('desktop syncs to the server', await until(() => D.ev(`window.api.getInfo().then(i => i.sync.mode === 'on')`)), null);
+// A deployed server keeps what earlier runs left. Every test text starts with
+// "Invented"; drop those this run did not bring, and the habits, so the counts hold.
+const tidy = keep => D.ev(`(() => {
+  const keep = new Set(${JSON.stringify(keep)});
+  let n = 0;
+  for (const i of Object.values(state.items)) if (/^Invented/.test(i.text) && !keep.has(i.id)) { delete state.items[i.id]; n++; }
+  const gone = new Set(state.habits.filter(h => /^Invented/.test(h.name)).map(h => h.id));
+  state.habits = state.habits.filter(h => !gone.has(h.id));
+  for (const k of Object.keys(state.habitLog)) if ([...gone].some(id => k.includes(id))) { delete state.habitLog[k]; n++; }
+  if (n || gone.size) changed();
+  return n + gone.size;
+})()`);
+if (REMOTE) { await sleep(1500); console.log('cleared from earlier runs: ' + await tidy(Object.keys(desk.items))); await sleep(2000); }
 
 console.log('--- the desktop page is unchanged');
 check('desktop: no web class, hover is available, TOUCH off',
@@ -156,7 +180,12 @@ console.log('--- negative control: a fresh phone joining changes nothing on the 
 await sleep(3000);
 check('desktop records byte-identical after the phone joined', (await records(D)) === deskBefore, null);
 check('desktop note intact', await D.ev(`/must survive the phone joining/.test(state.notes.professional)`), await D.ev(`state.notes.professional`));
-check('phone holds the same records as the desktop', (await records(P)) === deskBefore, null);
+const recDiff = async () => {
+  const d = JSON.parse(await records(D)), p = JSON.parse(await records(P));
+  return [...new Set([...Object.keys(d), ...Object.keys(p)])].filter(k => JSON.stringify(d[k]) !== JSON.stringify(p[k]))
+    .map(k => k + ' desktop=' + JSON.stringify(d[k]).slice(0, 80) + ' phone=' + JSON.stringify(p[k]).slice(0, 80));
+};
+check('phone holds the same records as the desktop', (await records(P)) === deskBefore, await recDiff());
 await tap('#settings-close');
 
 console.log('--- the list by touch');
@@ -196,7 +225,7 @@ await tap(row(idA) + ' input[type=checkbox]');
 check('tick saves and reaches the desktop', await until(async () => !!(await item(D, idA))?.doneAt), await item(D, idA));
 if (!(await P.ev(`document.querySelector(${JSON.stringify(row(idD))}).classList.contains('sel')`))) await tap(row(idD) + ' .todo-text');
 await tap(row(idD) + ' [data-act="drop"]');
-check('drop removes it, and the desktop sees it', await until(async () => !(await item(D, idD)) || !!(await item(D, idD)).droppedAt || !!(await item(D, idD)).doneAt), await item(D, idD));
+check('drop removes it, and the desktop sees it', await until(async () => { const it = await item(D, idD); return !it || !!it.droppedAt || !!it.doneAt; }), await item(D, idD));
 
 console.log('--- capture and share');
 await tap('#capture-input');
@@ -239,8 +268,9 @@ await snap('habits');
 
 check('no page exceptions on the phone', P.errs.length === 0, P.errs);
 check('no page exceptions on the desktop', D.errs.length === 0, D.errs);
+if (REMOTE) { await tidy([]); await sleep(2500); }
 console.log(fails ? fails + ' FAILED' : 'all passed');
 for (const c of [D, P]) c.ws.close();
-electron.kill(); edge.kill(); srv.kill();
+electron.kill(); edge.kill(); srv?.kill();
 await sleep(800);
 process.exit(fails ? 1 : 0);

@@ -700,9 +700,13 @@ test('wire: values survive as JSON text, including empty strings and arrays', ()
   }
 });
 
-test('applyRemote: only strictly newer wins; own echoes are no-ops', () => {
+test('applyRemote: newer wins, a tie goes to the remote copy; own echoes are no-ops', () => {
   const clock = { 'items/a': { h: C.hash({ v: 1 }), t: 100 } };
-  assert.equal(C.applyRemote(clock, 'items/a', { j: '{"v":2}', t: 100 }), null);
+  assert.equal(C.applyRemote({ 'items/a': { h: C.hash({ v: 1 }), t: 100 } }, 'items/a', { j: '{"v":1}', t: 100 }), null, 'an echo');
+  assert.equal(C.applyRemote({ 'items/a': { h: null, t: 100, d: true } }, 'items/a', { t: 100, d: true }), null, 'a tombstone echo');
+  assert.deepEqual(C.applyRemote({ 'items/a': { h: C.hash({ v: 1 }), t: 0 } }, 'items/a', { j: '{"v":2}', t: 0 }), { path: 'items/a', value: { v: 2 } }, 'a t 0 tie');
+  assert.deepEqual(C.applyRemote({ 'items/a': { h: C.hash({ v: 1 }), t: 0 } }, 'items/a', { t: 0, d: true }), { path: 'items/a', value: null }, 'a tie with a tombstone');
+  assert.equal(C.applyRemote(clock, 'items/a', { j: '{"v":1}', t: 100 }), null);
   assert.equal(C.applyRemote(clock, 'items/a', { j: '{"v":2}', t: 99 }), null);
   assert.ok(C.localIsNewer(clock, 'items/a', { t: 99 }));
   assert.deepEqual(C.applyRemote(clock, 'items/a', { j: '{"v":2}', t: 101 }), { path: 'items/a', value: { v: 2 } });

@@ -53,8 +53,10 @@ function applyWrites(store, writes) {
       continue;
     }
     if (cur && cur.wire.t >= w.t) {
-      // A tie keeps the stored copy; equal t is our own echo or a same-ms clash.
-      if (cur.wire.t > w.t) stale[path] = cur.wire;
+      // A tie keeps the stored copy. Equal t is the writer's own echo, a same-ms
+      // clash, or two devices with recovered (t 0) clocks; for the last two the
+      // writer is answered with the kept copy, which wins a tie on the device.
+      if (cur.wire.t > w.t || cur.wire.j !== w.j || !cur.wire.d !== !w.d) stale[path] = cur.wire;
       continue;
     }
     seq++;

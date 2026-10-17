@@ -38,6 +38,12 @@ byte-identical, and it checks the desktop page kept its hover and settings.
 Screenshots land in the scratch dir it prints. **Any change to `index.html` needs
 this run as well as a desktop look**: the same file is both UIs now.
 
+Both hand-checks run against a deployed Worker with `FLOATNOTE_CHECK_URL` and
+`FLOATNOTE_SETUP_KEY` set (staging's key is in `~/.floatnote-staging-setup-key`;
+read it into the variable, never print it). Do run them there after a server
+change: staging keeps every earlier run's records, which is how the `t 0` tie bug
+showed up, and the empty dev server never shows that.
+
 `npm test` covers the logic, not the UI. Anything about `index.html` or the window is a
 hand-check (`npm start`, see the data-dir trap below). Say which one a claim is.
 

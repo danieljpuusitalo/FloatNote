@@ -27,7 +27,9 @@ test('newest t wins per path; an older write is answered with the kept copy', ()
   assert.deepEqual(r.applied, {});
   assert.deepEqual(r.stale, { 'items/a': wire('first', 100) });
   r = S.applyWrites(st, { 'items/a': wire('same ms', 100) });
-  assert.deepEqual([r.applied, r.stale, r.seq], [{}, {}, 1], 'a tie keeps the stored copy and says nothing');
+  assert.deepEqual([r.applied, r.stale, r.seq], [{}, { 'items/a': wire('first', 100) }, 1], 'a tie keeps the stored copy and answers with it');
+  r = S.applyWrites(st, { 'items/a': wire('first', 100) });
+  assert.deepEqual([r.applied, r.stale, r.seq], [{}, {}, 1], 'its own echo is answered with nothing');
   r = S.applyWrites(st, { 'items/a': wire('newer', 200) });
   assert.deepEqual([r.from, r.seq], [1, 2]);
   assert.equal(st.get('items/a').wire.j, JSON.stringify({ text: 'newer' }));
@@ -322,6 +324,30 @@ test('e2e: a device with a recovered clock (t 0) is accepted, and its copy loses
   assert.equal(b.sync.status().mode, 'on', String(b.sync.status().error));
   assert.equal(b.state.items[id].text, 'Invented, stamped on A');
   assert.equal(a.state.meta.inventedOnB, 'Invented from B', 'a t 0 record with no rival still travels');
+});
+
+test('e2e: two recovered devices (both t 0, different copies) converge on the first one the server took', async () => {
+  const cl = cloud(), a = await device(cl, 'A'), b = await device(cl, 'B');
+  // Neither has a clock file: every record is t 0. The note differs.
+  a.state.notes.professional = { html: '<div>Invented, A recovered</div>' };
+  b.state.notes.professional = { html: '<div>Invented, B recovered</div>' };
+  C.recoverClock(a.clock, C.toRecords(a.state));
+  C.recoverClock(b.clock, C.toRecords(b.state));
+  await a.sync.start('server');
+  await settle(cl);
+  await b.sync.start('server');
+  await settle(cl);
+  assert.equal(b.state.notes.professional.html, '<div>Invented, A recovered</div>', 'B adopts the copy the server holds');
+  same(a, b);
+  // A device that pushes its t 0 copy while already connected is answered with the kept one.
+  const c2 = await device(cl, 'C');
+  await c2.sync.start('server');
+  await settle(cl);
+  c2.state.notes.professional = { html: '<div>Invented, C late</div>' };
+  c2.clock['notes/professional'] = { h: C.hash(c2.state.notes.professional), t: 0 };
+  await c2.sync.push(['notes/professional']);
+  await settle(cl);
+  same(a, c2);
 });
 
 test('e2e: offline reads as offline, not error, and coming back reconciles both ways', async () => {

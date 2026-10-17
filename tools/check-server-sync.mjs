@@ -2,6 +2,8 @@
 // local dev server: add, edit, tick, untick, delete, then the server goes away,
 // both edit, it comes back, and they converge. Two passes: races are intermittent.
 //   node tools/check-server-sync.mjs        (needs: cd server && npm install)
+// Against a deployed Worker: set FLOATNOTE_CHECK_URL and FLOATNOTE_SETUP_KEY. A
+// deployed server cannot be stopped from here, so that run skips the offline part.
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -13,18 +15,21 @@ import { randomBytes } from 'node:crypto';
 const repo = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const C = createRequire(import.meta.url)(repo + '/core.js');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const PORT = 8799, URL_ = 'http://127.0.0.1:' + PORT;
-const KEY = 'invented-' + randomBytes(12).toString('hex');
+const REMOTE = process.env.FLOATNOTE_CHECK_URL;
+const PORT = 8799, URL_ = REMOTE ? REMOTE.replace(/\/$/, '') : 'http://127.0.0.1:' + PORT;
+const KEY = REMOTE ? process.env.FLOATNOTE_SETUP_KEY : 'invented-' + randomBytes(12).toString('hex');
+if (REMOTE && !KEY) throw new Error('FLOATNOTE_CHECK_URL needs FLOATNOTE_SETUP_KEY');
 const work = mkdtempSync(join(tmpdir(), 'fn-two-'));
 const dbFile = join(work, 'server.sqlite');
 
 let srv;
 async function startServer() {
+  if (REMOTE) return;
   srv = spawn(process.execPath, [repo + '/server/dev-server.mjs', String(PORT), dbFile], { env: { ...process.env, SETUP_KEY: KEY }, stdio: 'ignore' });
   for (let i = 0; i < 40; i++) { await sleep(150); try { await fetch(URL_ + '/api/sync'); return; } catch {} }
   throw new Error('server did not start');
 }
-async function stopServer() { srv.kill(); await new Promise(r => srv.once('exit', r)); }
+async function stopServer() { if (REMOTE) return; srv.kill(); await new Promise(r => srv.once('exit', r)); }
 
 function dataDir(name) {
   const dir = join(work, name);
@@ -82,6 +87,7 @@ for (let pass = 1; pass <= 2; pass++) {
   check('delete on A reaches B', await until(() => B.ev(`!state.items[${JSON.stringify(id1)}]`)), await texts(B));
 
   // The server goes away. Both edit. It comes back.
+  if (REMOTE) { console.log('skip the server going away: it is deployed'); continue; }
   await stopServer();
   check('both read offline, not error', (await until(async () => (await mode(A)) === 'offline' && (await mode(B)) === 'offline', 10000)) === true, [await mode(A), await mode(B)]);
   const ta = `Invented ${pass}: written on A offline`, tb = `Invented ${pass}: written on B offline`;

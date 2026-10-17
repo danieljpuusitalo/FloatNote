@@ -82,10 +82,24 @@ unit tests had missed: `core.recoverClock` stamps unknown-age records `t 0`, whi
 the server refused, so a recovered device could never push.
 `wrangler deploy --dry-run` bundles (14.6 KiB, the DO binding present).
 
-**Next in Phase 2: deploy staging** (`cd server && npx wrangler deploy --env staging`,
-then `npx wrangler secret put SETUP_KEY --env staging`) and run the two-window check
-against it, which is the first time the Durable Object adapter itself runs.
-Blocked on Daniel: wrangler is not logged in (`! npx wrangler login`, once).
+**Staging is deployed (2026-10-17)**: `https://floatnote-staging.daniel-jpuusitalo.workers.dev`,
+Cloudflare account daniel.jpuusitalo@gmail.com, version `e50687b6`. Deploy with
+`cd server && npm run deploy:staging` (local wrangler; the global one under
+`%APPDATA%
+pm` is broken and unused). Its SETUP_KEY is in
+`~/.floatnote-staging-setup-key`, outside every repo; never print it. Both hand-checks
+take `FLOATNOTE_CHECK_URL` + `FLOATNOTE_SETUP_KEY` to run against it: the
+two-window check passed both passes (the offline part is skipped, a deployed
+server cannot be stopped), and the phone check 50/50, twice.
+
+**The staging run found a real sync bug** the local runs could not (the dev
+server starts empty, staging keeps everything): two devices whose records are
+both `t 0` (clocks recovered, no clock file) with different copies never
+converged. The server kept its copy on a tie and said nothing; the device never
+adopts an equal `t`. Fixed: a tie now goes to the server's copy
+(`core.applyRemote`), and the server answers a tie with different content with
+the kept copy (`server-core.applyWrites`). New e2e test, and each half of the fix
+mutated back fails it.
 
 **Phase 3 (the phone is the same app) is built and verified locally, on branch
 `phase3-phone` (from `phase2-server`), not deployed.** Nothing changes for Daniel yet.
@@ -110,7 +124,7 @@ Blocked on Daniel: wrangler is not logged in (`! npx wrangler login`, once).
   nearest open slot there; the custom Notes menu is off on touch; shared text
   lands in the capture box to check, not straight on a list.
 
-Verified: `npm test` 147/147, 10 full runs in a row green (`test/web.test.js` is
+Verified: `npm test` 147/147 (148 with the tie fix), 10 full runs in a row green (`test/web.test.js` is
 new: the page edits, the desktop file keeping `connect-src 'none'`, a negative
 control where a missing or doubled anchor throws, and every service-worker shell
 file existing). A flaky e2e helper was fixed: `settle()` counted event-loop turns
@@ -122,9 +136,11 @@ the desktop page keeping hover and its settings. Negative control: after a fresh
 phone joins, the desktop's records are byte-identical and the phone holds the
 same. It caught the Due input sitting 1px inside the button's border.
 
-**Not yet proven:** the Durable Object serving the page (needs the staging deploy)
-and a real phone. Both wait on `! npx wrangler login`. Then: deploy staging, open
-it on his phone, add to home screen, pair, and run the same list by hand.
+**Proven on staging:** the Durable Object serving the page and syncing it (above).
+**Not yet proven: a real phone.** Daniel opens the staging URL on his phone, adds it
+to the home screen, pairs in Settings with the key from
+`~/.floatnote-staging-setup-key`, and runs the list by hand. Staging holds only
+invented test data (each phone-check run clears its `Invented` items).
 
 Accepted limits: two tabs of the app in one browser can overwrite each other's
 IndexedDB copy; iOS may evict storage of a site not added to the home screen (the
@@ -185,9 +201,7 @@ Reality findings:
 
 ## Next
 
-1. Daniel runs `! npx wrangler login`; then deploy staging, run the two-window
-   check and the phone check against it, and try it on his real phone (Phases 2
-   and 3 above). Then Phases 4 to 6 of `bright-coalescing-pond.md`: decisions
+1. Daniel tries staging on his real phone (Phase 3 above). Then Phases 4 to 6 of `bright-coalescing-pond.md`: decisions
    relay, cutover (2.2.0), retire Firebase.
 2. Watch keep rate per source in the run reports; Awaiting-their-reply is 0 of 3
    so far.

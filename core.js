@@ -944,19 +944,24 @@
   }
 
   // Decide one incoming record. Returns { path, value } to apply (value null =
-  // remove) or null when the local copy is as new or newer. Strictly-greater t
-  // wins, so our own writes echoing back are no-ops.
+  // remove) or null when the local copy is newer or the same. A tie goes to the
+  // remote copy: two devices whose clocks were recovered both hold t 0, and only
+  // deferring to the server's copy lets them converge. Our own writes echoing
+  // back carry the same content, so they are no-ops.
   function applyRemote(clock, path, wire) {
     if (!wire || typeof wire.t !== 'number') return null;
     const local = clock[path];
-    if (local && wire.t <= local.t) return null;
+    if (local && wire.t < local.t) return null;
     if (wire.d) {
+      if (local && wire.t === local.t && local.d) return null;
       clock[path] = { h: null, t: wire.t, d: true };
       return { path, value: null };
     }
     const v = wireValue(wire);
     if (v === undefined || v === null) return null;
-    clock[path] = { h: hash(v), t: wire.t };
+    const h = hash(v);
+    if (local && wire.t === local.t && !local.d && local.h === h) return null;
+    clock[path] = { h, t: wire.t };
     return { path, value: v };
   }
 
