@@ -63,9 +63,13 @@ features and the drop-folder format; version in `package.json`.
 
 - **`npm start` uses the REAL data directory.** In dev, `userData` resolves to
   `%APPDATA%/floatnote`, which on Windows is the same folder as the installed app's
-  `%APPDATA%/FloatNote`. A v2 build migrates whatever it loads. For any dev run,
-  set `FLOATNOTE_DATA_DIR` to a scratch copy. Migration does write
-  `floatnote-data.v1.json` first, but do not rely on it.
+  `%APPDATA%/FloatNote`, the live data. For any dev run, set `FLOATNOTE_DATA_DIR`
+  to a scratch copy. (v2 does not migrate v1: it sets a v1 file aside as
+  `floatnote-data.v1.json` and starts empty, keeping only the preferences.
+  `migrateV1` stays in `core.js`, tested, for a by-hand rescue.)
+- `decisions.log` and `collector-preferences.md` in the data dir are the
+  collector's feedback loop (`docs/INTAKE.md`). They hold Daniel's real to-do
+  text: they never go into this public repo.
 - Data files in the data dir: `floatnote-data.json` (state, `schemaVersion: 2`),
   `floatnote-clock.json` (per-record sync timestamps and tombstones; deleting it
   makes every record look new), `floatnote-window.json`, `floatnote-sync.json`

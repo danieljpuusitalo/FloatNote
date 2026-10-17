@@ -31,15 +31,23 @@ Windows only, built with Electron. The UI is a single `index.html`.
 
 ## The morning pick
 
-On the first launch or focus of each day:
+On the first launch or focus of each day (never while you are typing):
 
 1. **Carry-overs.** Each unfinished Today item from yesterday comes up one at a
-   time: **Carry** it into today, send it back **To Next**, or **Drop** it. A
-   carried item wears a "2nd day", "3rd day" badge.
-2. **Pick for today.** Next is listed, due items first. Pick until Today is full
-   (keys 1 to 9), then **Start day**.
+   time: **Carry** it into today (`C`), send it back **To Next** (`N`), or
+   **Drop** it (`D`). A carried item wears a "2nd day", "3rd day" badge.
+2. **New from Claude.** Each suggestion from the drop folder, oldest first, with
+   what kind it is ("You promised", "Waiting on them", ...) and the sentence it
+   came from: **Keep** (`K`), straight onto **Today** (`T`), or **Drop** (`D`).
+   **Decide later** (`S`) leaves it; a suggestion not kept within 3 days expires.
+3. **Pick for today.** Next is listed, due items first. Pick until Today is full
+   (keys 1 to 9), then **Start day** (`Enter`).
 
-**Not now** skips it. "Pick from Next" under Today opens it again at any time.
+`Esc` closes it. "Pick from Next" under Today opens step 3 again at any time, and
+"N suggestions from Claude · Review" opens step 2.
+
+**Nothing rots.** A Next item untouched for 30 days slides to Later, and the first
+pick of the week says how many moved.
 
 If 5 or more Next items have gone untouched for 14 days, a **Still doing this?**
 card walks through them: Keep, Later, or Drop.
@@ -73,12 +81,12 @@ The to-do list works without the mouse. Press `?` on the list to see this.
 |---|---|
 | `↑` `↓` | Select a to-do |
 | `Space` or `X` | Tick or untick |
-| `Enter` or `E` | Edit. On a suggestion, Keep |
+| `Enter` or `E` | Edit |
 | `T` / `W` / `L` | Move to Today / Waiting / Later, or back to Next |
 | `P` | Switch work and personal |
 | `D` | Set the due date |
 | `Del` | Drop |
-| `Ctrl+Z` | Undo a drop |
+| `Ctrl+Z` | Undo a drop (for 10 seconds) |
 | `Esc` | Clear the selection |
 | `N` or `/` | New to-do |
 | `K` `L` `D` | Keep, Later, Drop on the "Still doing this?" card, when nothing is selected |
@@ -113,18 +121,24 @@ on the next launch if the app was closed), added, and deleted.
   ],
   "done": [
     { "done": "<item id>", "why": "You sent the cap table on 15 Oct" }
+  ],
+  "replied": [
+    { "replied": "<waiting item id>", "why": "Rui replied on 16 Oct" }
   ]
 }
 ```
 
-- **`items`** arrive under **Suggested**, in Next (or Waiting, with `"list": "waiting"`),
-  and are kept with Enter or dropped with Delete. Other fields: `ctx` (`work` or
+- **`items`** are suggestions, reviewed in the morning pick (or with **Review**
+  under Today). They go to Next, or Waiting with `"list": "waiting"`. Other fields:
+  `kind` (`promise`, `ask`, `waiting`, `deadline`, `blocked`), `ctx` (`work` or
   `personal`), `who`, `due` (`YYYY-MM-DD`), `note`, `source` (`{url, label}`), and
   `key` (a stable id for dedupe). `"direct": true` means the person asked for this
-  item themselves. It skips Suggested and may also use `later`, or `today` if Today
+  item themselves. It skips review and may also use `later`, or `today` if Today
   has room.
 - **`done`** entries put a "Looks done: ..." line on an open item, with **Done** and
   **Not yet**. Nothing is ticked without a click.
+- **`replied`** entries bring a Waiting item back to Next with a "Replied: ..." badge.
+  Click the badge to clear it.
 - A top-level array of entries also works.
 - Write `name.json.tmp` and then rename it to `name.json`. Files ending in `.tmp` are
   ignored.
@@ -135,9 +149,15 @@ on the next launch if the app was closed), added, and deleted.
   what was skipped and why. A file that is not valid JSON after 10 seconds, or is
   over 1 MB, moves to `inbox/rejected/` with a `.why.txt` beside it.
 
-The Claude Code skill in `skills/floatnote/` writes these files. It has three modes:
-capture ("add X to FloatNote"), an email sweep for promises and asks (shown for
-confirmation, every item quoting its sentence), and close-out. Install it with
+Every keep, drop, done, expiry and "not yet" on something Claude brought in is
+appended to `decisions.log` in the data folder (one JSON line each, 120 days kept),
+so the collector can learn what is worth suggesting. An optional
+`collector-preferences.md` beside it holds standing notes for the collector.
+
+The Claude Code skill in `skills/floatnote/` writes these files. It has two modes:
+capture ("add X to FloatNote") and collect, which reads sent mail and
+Awaiting-their-reply threads (read-only) for promises, waiting items, replies and
+things already done. `docs/INTAKE.md` is the design. Install it with
 `npm run install-skill`.
 
 ## Notes and Habits
@@ -152,14 +172,15 @@ confirmation, every item quoting its sentence), and close-out. Install it with
 ## Settings
 
 The gear (or `Ctrl+,`): sync passphrase, how many things Today holds, the capture
-hotkey, and starting with Windows. The moon toggles the light (paperwhite) theme.
+hotkey, keeping the window above others, and starting with Windows. The moon toggles the light (paperwhite) theme.
 
 ## Your data
 
 Everything lives in `%APPDATA%\FloatNote\`: `floatnote-data.json` holds the state,
-`backups/` keeps one copy a day for 14 days, and `inbox/` is the drop folder. The
-first v2 launch converts v1 data in place, writing the untouched v1 file to
-`floatnote-data.v1.json` first.
+`backups/` keeps one copy a day for 14 days, `inbox/` is the drop folder, and
+`decisions.log` is the feedback for the collector. v2 starts fresh: the first v2
+launch sets a v1 data file aside as `floatnote-data.v1.json`, keeps your name,
+colour and theme, and starts with empty lists, notes and habits.
 
 ---
 
@@ -185,15 +206,16 @@ $env:FLOATNOTE_DATA_DIR = "$env:TEMP\floatnote-dev"; npm start
 
 ## Version history
 
-### v2.0.0 (unreleased, branch `v2`)
+### v2.0.0
 - To-do system: Today / Next / Waiting / Later, a capped Today, the morning pick
   with carry-overs, the "Still doing this?" card for stale items, compact mode
 - One-line capture with `@who`, dates, `#p`, `!`, `~`, and a global-hotkey popup
 - Keyboard-first list: select, tick, move, edit, date, drop, undo
 - Per-record sync, a settings screen, start with Windows
-- The drop folder and the `floatnote` Claude skill: suggestions with their
-  evidence, and "Looks done" hints
-- Daily backups; v1 data migrates on first launch
+- The drop folder and the `floatnote` Claude skill: suggestions reviewed in the
+  morning pick, "Looks done" hints, "replied" on Waiting, a decisions log
+- Suggestions expire after 3 days; Next items untouched for 30 days slide to Later
+- Daily backups; a fresh start, with v1 data set aside
 - Removed: the configurable dashboard and the quote rotation
 
 ### v1.4.0: Cross-Device Sync & Audit
