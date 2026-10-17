@@ -363,10 +363,96 @@
     return [].concat(arr('items'), arr('done'), arr('replied'));
   }
 
+  // A collector run reports itself with { run: {...} } next to its entries, so
+  // a run that found nothing, or failed, still shows. Bounded and typed here;
+  // anything else in it is dropped.
+  function cleanRun(raw, t) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    const str = (v, n) => typeof v === 'string' && v.trim() ? v.trim().slice(0, n) : undefined;
+    const num = v => typeof v === 'number' && isFinite(v) && v >= 0 ? v : undefined;
+    const at = typeof raw.at === 'number' ? raw.at : typeof raw.at === 'string' ? Date.parse(raw.at) : NaN;
+    const run = { at: isFinite(at) ? at : t };
+    if (str(raw.id, 60)) run.id = str(raw.id, 60);
+    if (raw.scheduled === true) run.scheduled = true;
+    if (Array.isArray(raw.sources)) {
+      const s = raw.sources.map(v => str(v, 40)).filter(Boolean).slice(0, 10);
+      if (s.length) run.sources = s;
+    }
+    for (const k of ['added', 'hints', 'replied']) if (num(raw[k]) !== undefined) run[k] = Math.floor(raw[k]);
+    if (num(raw.costUsd) !== undefined) run.costUsd = Math.round(raw.costUsd * 10000) / 10000;
+    if (Array.isArray(raw.errors)) {
+      const e = raw.errors.map(v => str(v, 200)).filter(Boolean).slice(0, 5);
+      if (e.length) run.errors = e;
+    }
+    return run;
+  }
+
+  // The same run can report twice: the skill with its findings, then the
+  // scheduler with cost and exit code. Same id: merged, counts added up.
+  // Otherwise the newer run wins. counts, when given, are what the app itself
+  // took in from the run's file, and replace whatever the file claimed.
+  function recordRun(state, raw, t, counts) {
+    const run = cleanRun(raw, t);
+    if (!run) return false;
+    if (counts) Object.assign(run, counts);
+    state.meta = state.meta || {};
+    const prev = state.meta.lastRun;
+    if (prev && run.id && prev.id === run.id) {
+      // The earliest at: the scheduler's start time beats the skill's file time.
+      const merged = Object.assign({}, prev, run, { at: Math.min(prev.at, run.at) });
+      for (const k of ['added', 'hints', 'replied']) {
+        if (prev[k] !== undefined || run[k] !== undefined) merged[k] = (prev[k] || 0) + (run[k] || 0);
+      }
+      const errors = (prev.errors || []).concat(run.errors || []).slice(0, 5);
+      if (errors.length) merged.errors = errors;
+      state.meta.lastRun = merged;
+    } else if (!prev || !(prev.at > run.at)) state.meta.lastRun = run;
+    else return false;
+    return true;
+  }
+
+  const RUN_DUE_MINUTES = 8 * 60 + 30;   // a scheduled run not seen by 08:30 is missing
+
+  function hhmm(ms) { const d = new Date(ms); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+
+  // One line about the collector, or null. 'warn' is shown wherever Daniel
+  // looks; 'ok' only in the morning pick. "Missing" applies only once a
+  // scheduled run has been seen in the last two weeks, on weekdays, after 08:30.
+  function runStatus(state, now) {
+    const run = state.meta && state.meta.lastRun;
+    if (!run || typeof run.at !== 'number') return null;
+    const d = now instanceof Date ? now : new Date(now);
+    if (dateStr(run.at) === dateStr(d)) {
+      if (run.errors && run.errors.length) {
+        return { level: 'warn', text: 'Claude’s check at ' + hhmm(run.at) + ' had a problem: ' + run.errors[0] };
+      }
+      // The skill always names its sources. A run without them is the scheduler
+      // reporting a run whose skill never wrote back: that is not "nothing new".
+      if (!run.sources || !run.sources.length) {
+        return { level: 'warn', text: 'Claude’s check at ' + hhmm(run.at) + ' did not report what it found. See collector-logs.' };
+      }
+      const parts = [];
+      if (run.added) parts.push(run.added + ' new');
+      if (run.hints) parts.push(run.hints + (run.hints === 1 ? ' looks done' : ' look done'));
+      if (run.replied) parts.push(run.replied + ' replied');
+      return { level: 'ok', text: 'Claude checked ' + run.sources.join(' and ') + ' at ' + hhmm(run.at) + ': ' + (parts.length ? parts.join(', ') : 'nothing new') + '.' };
+    }
+    const day = d.getDay();
+    if (run.scheduled && day >= 1 && day <= 5 && d.getHours() * 60 + d.getMinutes() >= RUN_DUE_MINUTES &&
+      d.getTime() - run.at < 14 * DAY_MS) {
+      const last = new Date(run.at);
+      return { level: 'warn', text: 'Claude’s morning check has not run today. Last run ' +
+        ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][last.getDay()] + ' ' + last.getDate() + ' ' +
+        ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][last.getMonth()] +
+        ' at ' + hhmm(run.at) + '.' };
+    }
+    return null;
+  }
+
   function ingestInbox(state, payload, now, seen) {
     const t = typeof now === 'number' ? now : (now || new Date()).getTime();
     seen = seen || {};
-    const out = { added: [], direct: [], hinted: [], replied: [], skipped: [] };
+    const out = { added: [], direct: [], hinted: [], replied: [], skipped: [], run: false };
     const skip = (raw, reason) => out.skipped.push({ text: raw && typeof raw === 'object' ? String(raw.text || raw.done || raw.replied || '').slice(0, 80) : '', reason });
     const open = Object.values(state.items).filter(i => !isDone(i));
     const existing = new Set(open.map(i => normText(i.text)));
@@ -436,6 +522,11 @@
       seen[key] = { t };
       out.added.push(item.id);
       if (direct) out.direct.push(item.id);
+    }
+    if (payload && typeof payload === 'object' && !Array.isArray(payload) && payload.run !== undefined) {
+      const counts = { added: out.added.length - out.direct.length, hints: out.hinted.length, replied: out.replied.length };
+      out.run = recordRun(state, payload.run, t, counts);
+      if (!out.run) out.skipped.push({ text: '', reason: 'run: not an object, or older than the last one' });
     }
     return out;
   }
@@ -904,7 +995,7 @@
     compareNext, listItems, openCount, todayCapOf,
     completeItem, uncompleteItem, doneOn, streak,
     startDay, needsPick, carryOvers,
-    ingestSuggestions, ingestInbox, suggestionKey, pruneSeen,
+    ingestSuggestions, ingestInbox, suggestionKey, pruneSeen, recordRun, runStatus,
     KINDS, SUGGESTION_DAYS, SLIDE_DAYS, DECISIONS,
     pendingSuggestions, expireSuggestions, slideToLater, weekStart, slidToReport, fromCollector, decisionEntry,
     emptyState, normalizeState, isV1, migrateV1, freshFromV1,

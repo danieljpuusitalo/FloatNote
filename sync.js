@@ -83,7 +83,13 @@ function createSync(opts) {
     const myGen = gen;
     return Promise.resolve(backend.update(root, map)).then(
       () => { if (myGen === gen) setStatus({ lastSync: now(), error: null }); },
-      (err) => { if (myGen === gen) setStatus({ mode: 'error', error: message(err) }); }
+      (err) => {
+        if (myGen !== gen) return;
+        setStatus({ mode: 'error', error: message(err) });
+        // A refused write is not queued anywhere, so nothing would ever re-send
+        // it. A fresh run reconciles: it pushes whatever the server lacks.
+        if (wanted && retryTimer === null) scheduleRetry();
+      }
     );
   }
 
@@ -120,7 +126,7 @@ function createSync(opts) {
   // Try again now, if sync is wanted and not running: the machine woke up or the
   // network came back. A no-op once a start has got through.
   function retryNow() {
-    if (!wanted || root) return Promise.resolve();
+    if (!wanted || (root && status.mode !== 'error')) return Promise.resolve();
     retryDelay = RETRY_MIN_MS;
     return run(wanted);
   }
@@ -158,7 +164,7 @@ function createSync(opts) {
       for (const kind of kinds) {
         unsubs.push(backend.listen(root, kind, (key, wire) => incoming(myGen, C.keyToPath(kind, key), wire)));
       }
-      if (status.mode !== 'error') setStatus({ mode: 'on', lastSync: now() });
+      if (status.mode !== 'error') { setStatus({ mode: 'on', lastSync: now() }); retryDelay = RETRY_MIN_MS; }
       unsubs.push(backend.onConnected((up) => {
         if (myGen === gen && status.mode !== 'error') setStatus({ mode: up ? 'on' : 'offline' });
       }));

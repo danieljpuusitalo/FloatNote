@@ -486,6 +486,93 @@ test('inbox: replied brings a Waiting item back to Next, marked, once', () => {
   assert.deepEqual(noWhy.skipped.map(x => x.reason), ['a reply needs a why']);
 });
 
+// ---------- collector runs report themselves ----------
+
+test('run: a run entry is recorded, bounded, and needs no items', () => {
+  const s = C.emptyState();
+  const r = C.ingestInbox(s, { run: {
+    id: 'r1', at: T - 3 * 3600e3, scheduled: true, sources: ['sent mail', '', 42, 'checkpoints'],
+    costUsd: 0.123456, errors: ['x'.repeat(300)], extra: 'dropped'
+  } }, T, {});
+  assert.equal(r.run, true);
+  assert.deepEqual(r.added, []);
+  const run = s.meta.lastRun;
+  assert.deepEqual(Object.keys(run).sort(), ['added', 'at', 'costUsd', 'errors', 'hints', 'id', 'replied', 'scheduled', 'sources']);
+  assert.deepEqual(run.sources, ['sent mail', 'checkpoints']);
+  assert.equal(run.costUsd, 0.1235);
+  assert.equal(run.errors[0].length, 200);
+  assert.ok(C.toRecords(s)['meta/lastRun'], 'the run is a synced record');
+});
+
+test('run: counts are what the app took in from that file, not what the file claims', () => {
+  const s = stateWith([C.makeItem({ id: 'w', text: 'Invented reply from Jens', list: 'waiting' }, T - DAY)]);
+  C.ingestInbox(s, {
+    items: [{ text: 'Send Ines the invented deck', kind: 'promise' }, { text: 'Send Ines the invented deck' }, { text: 'Book it', direct: true }],
+    replied: [{ replied: 'w', why: 'Jens replied' }],
+    run: { id: 'r1', added: 99 }
+  }, T, {});
+  const run = s.meta.lastRun;
+  assert.deepEqual([run.added, run.hints, run.replied], [1, 0, 1], 'one suggestion landed (the repeat was skipped, the direct add is not a suggestion)');
+  // The scheduler's report for the same run adds nothing to the counts.
+  C.ingestInbox(s, { run: { id: 'r1', costUsd: 0.31 } }, T + 60e3, {});
+  assert.deepEqual([s.meta.lastRun.added, s.meta.lastRun.replied, s.meta.lastRun.costUsd], [1, 1, 0.31]);
+});
+
+test('run: the same id merges (skill counts, then scheduler cost); an older run never replaces a newer one', () => {
+  const s = C.emptyState();
+  C.recordRun(s, { id: 'r1', at: T - 1000, added: 3, sources: ['sent mail'] }, T);
+  C.recordRun(s, { id: 'r1', at: T, costUsd: 0.4, errors: ['claude exited 1'] }, T);
+  assert.equal(s.meta.lastRun.added, 3);
+  assert.equal(s.meta.lastRun.costUsd, 0.4);
+  assert.equal(s.meta.lastRun.at, T - 1000, 'the earlier time is kept');
+  assert.deepEqual(s.meta.lastRun.errors, ['claude exited 1']);
+  // The scheduler's start time beats the skill's later file time, in either order.
+  C.recordRun(s, { id: 'r1', at: T - 5000 }, T);
+  assert.equal(s.meta.lastRun.at, T - 5000);
+  assert.equal(C.recordRun(s, { id: 'r0', at: T - DAY }, T), false);
+  assert.equal(s.meta.lastRun.id, 'r1');
+  assert.equal(C.recordRun(s, 'nope', T), false);
+  // Negative control: a different, newer id replaces.
+  assert.equal(C.recordRun(s, { id: 'r2', at: T + 1 }, T), true);
+  assert.equal(s.meta.lastRun.added, undefined);
+});
+
+test('run: an array payload has no run, and a bad run is reported as skipped', () => {
+  const s = C.emptyState();
+  assert.equal(C.ingestInbox(s, [{ text: 'a' }], T, {}).run, false);
+  const r = C.ingestInbox(s, { run: [1, 2] }, T, {});
+  assert.equal(r.run, false);
+  assert.match(r.skipped[0].reason, /^run:/);
+});
+
+test('runStatus: ran today, ran with errors, nothing new', () => {
+  const s = C.emptyState();
+  const at = new Date(2026, 9, 1, 7, 15).getTime();
+  assert.equal(C.runStatus(s, NOW), null, 'no run ever: quiet');
+  C.recordRun(s, { at, sources: ['sent mail'], added: 3, replied: 1 }, at);
+  assert.deepEqual(C.runStatus(s, NOW), { level: 'ok', text: 'Claude checked sent mail at 07:15: 3 new, 1 replied.' });
+  s.meta.lastRun = { at, sources: ['sent mail'] };
+  assert.equal(C.runStatus(s, NOW).text, 'Claude checked sent mail at 07:15: nothing new.');
+  // Only the scheduler reported (cost, no sources): the skill never wrote back.
+  s.meta.lastRun = { at, scheduled: true, costUsd: 0.2 };
+  assert.deepEqual(C.runStatus(s, NOW), { level: 'warn', text: 'Claude’s check at 07:15 did not report what it found. See collector-logs.' });
+  s.meta.lastRun = { at, errors: ['Gmail search failed twice'] };
+  assert.deepEqual(C.runStatus(s, NOW), { level: 'warn', text: 'Claude’s check at 07:15 had a problem: Gmail search failed twice' });
+});
+
+test('runStatus: a scheduled run is missing only on a weekday after 08:30', () => {
+  const s = C.emptyState();
+  const wed = new Date(2026, 8, 30, 7, 15).getTime();   // Wednesday 30 September
+  s.meta.lastRun = { at: wed, scheduled: true };
+  assert.deepEqual(C.runStatus(s, NOW), { level: 'warn', text: 'Claude’s morning check has not run today. Last run Wed 30 Sep at 07:15.' });
+  assert.equal(C.runStatus(s, new Date(2026, 9, 1, 8, 29)), null, 'before 08:30 it may still come');
+  assert.equal(C.runStatus(s, new Date(2026, 9, 3, 12, 0)), null, 'Saturday: none expected');
+  assert.equal(C.runStatus(s, new Date(2026, 9, 20, 12, 0)), null, 'three weeks quiet: the schedule is gone');
+  // Negative control: a hand run is never expected.
+  s.meta.lastRun = { at: wed };
+  assert.equal(C.runStatus(s, NOW), null);
+});
+
 test('inbox: finishing a replied item clears the mark', () => {
   const s = stateWith([C.makeItem({ id: 'w', text: 'Invented chase', list: 'waiting' }, T)]);
   C.ingestInbox(s, [{ replied: 'w', why: 'They answered' }], T, {});

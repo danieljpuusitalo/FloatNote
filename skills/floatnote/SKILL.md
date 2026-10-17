@@ -1,7 +1,7 @@
 ---
 name: floatnote
-description: Put to-dos into Daniel's FloatNote app. Two modes - capture ("add X to FloatNote") and collect (read sent mail and Awaiting-their-reply threads for promises, waiting items, things already done and replies, as suggestions he keeps or drops in the morning pick). Writes only to FloatNote's drop folder; Gmail is read-only.
-argument-hint: ["add <to-do>" | "collect" | "collect last 3 days"]
+description: Put to-dos into Daniel's FloatNote app. Two modes - capture ("add X to FloatNote") and collect (read sent mail, Awaiting-their-reply threads and his project checkpoints for promises, waiting items, things blocked on him, things already done and replies, as suggestions he keeps or drops in the morning pick). Writes only to FloatNote's drop folder; Gmail is read-only.
+argument-hint: ["add <to-do>" | "collect" | "collect last 3 days" | "collect scheduled run=<id>"]
 ---
 
 # FloatNote bridge
@@ -20,7 +20,8 @@ logged, and the collector reads them before every run.
 ## Where things are
 
 - Data dir: `%APPDATA%\FloatNote` (in Git Bash: `"$APPDATA/FloatNote"`). If the env
-  var `FLOATNOTE_DATA_DIR` is set, use that instead.
+  var `FLOATNOTE_DATA_DIR` is set, use that instead. A `data=<path>` argument wins
+  over both: a scheduled run has no shell to read env vars with, so it passes one.
 - Drop folder: `<data dir>/inbox/`. Create it if it is missing.
 - `<data dir>/floatnote-data.json` holds the current state. **Read it, never write
   it.** Open items are `items[id]` with no `doneAt`. A pending suggestion has
@@ -74,11 +75,14 @@ Write tool or node, never a PowerShell heredoc.
   "replied": [
     { "replied": "<waiting item id>", "why": "Mo replied on 16 Oct",
       "source": { "url": "https://mail.google.com/mail/u/0/#all/<threadId>", "label": "Re: data room" } }
-  ]
+  ],
+  "run": { "id": "hand-20261017-091500",
+           "sources": ["sent mail", "Awaiting-their-reply", "checkpoints"], "errors": [] }
 }
 ```
 
-A top-level array of entries is also accepted. Field rules, as the app enforces them:
+A top-level array of entries is also accepted (capture only: it cannot carry a
+`run`). Field rules, as the app enforces them:
 
 | Field | Rule |
 |---|---|
@@ -94,6 +98,7 @@ A top-level array of entries is also accepted. Field rules, as the app enforces 
 | `direct` | `true` only when Daniel asked for this exact item himself. Skips review. |
 | `done` / `why` | A "Looks done" hint on an open item. `why` is required. Nothing is ticked without his click. |
 | `replied` / `why` | A Waiting item got its answer. It moves back to Next with a "Replied: ..." badge. Only for items on Waiting. |
+| `run` | Collect only, see below. The app counts what it actually took in from the file itself; do not send counts. |
 
 An item whose text matches an open item is skipped ("already on a list"). Anything
 the app has seen before, kept, dropped or expired, is skipped ("already suggested
@@ -118,8 +123,29 @@ named or in context. Any Claude session can do this.
 ## Mode 2: collect
 
 Trigger: "collect for FloatNote", "sweep my email into FloatNote", "what did I
-promise people", "/floatnote collect". It runs **by hand** for now (INTAKE.md,
-"Cadence and spend"); do not schedule it.
+promise people", "/floatnote collect". It also runs **scheduled**, weekdays at
+07:15, from `~/FloatNote/tools/collector/run.ps1` (task `FloatNoteCollector`),
+with the argument `collect scheduled run=<id> data=<data dir>`.
+
+**Every collect run writes exactly one drop file, and it carries a `run` entry**,
+even when nothing was found and even when a step failed. That is how the app
+tells "nothing new" apart from "did not run" and "broke":
+
+- `id`: the `run=<id>` argument when given, else `hand-<yyyymmdd-hhmmss>`.
+- No `at` and no counts: the app stamps the time and counts what it took in.
+- `scheduled: true` only in a scheduled run.
+- `sources`: the sources actually checked, from `sent mail`,
+  `Awaiting-their-reply`, `checkpoints`. A source that failed is left out.
+  Never empty: if every source failed, `["none"]`, with the errors.
+- `errors`: one short plain sentence per failed step ("Gmail search failed
+  twice", "Gmail is not connected"). Empty when all went well.
+
+**Scheduled runs** (argument contains `scheduled`) have no Bash, no PowerShell and
+no one to ask. The `data=` argument is the data dir: use that exact path for every
+file this run reads or writes, never `%APPDATA%`. Write the file with the Write tool as `<data dir>/inbox/<id>-collect.json.tmp` and
+leave it as `.tmp`: the scheduler renames it after the run and adds the cost. Do
+not wait for `processed.log`. Writes anywhere else are refused, by design. The
+final report is the log, so keep it to the few lines in step 11.
 
 **What Gmail may be read, and how.** Standing approval, for this mode only:
 Daniel's **sent mail**, and threads labelled **Awaiting-their-reply**. Nothing
@@ -153,6 +179,22 @@ Default window: sent mail 7 days. Honour any window he gives.
    suggestions and anything already carrying a hint), look in sent mail after the
    item's `createdAt` for the message that does the thing. Found: a `done` entry,
    `why` past tense, `source` the sent thread. A plausible guess is not a hint.
+5b. **Checkpoints** (`kind: blocked`). Local files, no Gmail. Read
+   `~/.claude/ops/registry.json`. For each project (and each of its
+   `workstreams`), read its `state` file, resolved against the project's `path`.
+   Skip a missing file and any project in `quiet_projects` of
+   `~/.claude/ops/maint/policy.json`. Only a line that explicitly says the work
+   waits on Daniel counts: "blocked on Daniel", "Daniel's call", "needs Daniel's
+   hand". A line that is struck through, marked done or resolved does not.
+   - New: an item, `kind: blocked`, `text` the action he has to take, verb first,
+     with the project's name ("Decide the AD.AS hold for equity cockpit"). `note`
+     quotes the line exactly, then `(<project id> checkpoint)`. No `source` (it
+     must be a web link). `key`: `ckpt:<project id>:<the first six words of the
+     line, lowercase, joined by hyphens>`, so the same line is never suggested twice.
+   - Closing: for each open item with `kind: blocked`, find the project in its
+     note. If the quoted line is no longer in that state file, a `done` entry,
+     `why` "The <project> checkpoint no longer lists it".
+   - At most 2 new checkpoint items per run; they count toward the 5 below.
 6. **Best first, at most about 5 new suggestions per run.** Rank by how clearly
    the sentence commits him and how soon it matters. Merge one commitment found in
    several messages into one item. Hints and replies do not count toward the 5.
@@ -164,8 +206,8 @@ Default window: sent mail 7 days. Honour any window he gives.
    emails, receipts, acknowledgements ("will do", "thanks", "see you there"),
    scheduling confirmations, forwards with no ask.
 9. **Write without asking.** The morning pick is the review, so do not show
-   candidates in chat first. Write one drop file (no `direct`), then read
-   `processed.log`.
+   candidates in chat first. Write one drop file (no `direct`) with the `run`
+   entry, then read `processed.log` (a scheduled run skips that read).
 10. Robustness: first page only (up to 50 threads per query), open about 15 threads
     at most. If a search result is too large, narrow the window once and retry. If
     a tool errors twice, skip that step, say so, and continue.

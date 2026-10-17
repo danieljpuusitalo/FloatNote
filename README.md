@@ -139,6 +139,11 @@ on the next launch if the app was closed), added, and deleted.
   **Not yet**. Nothing is ticked without a click.
 - **`replied`** entries bring a Waiting item back to Next with a "Replied: ..." badge.
   Click the badge to clear it.
+- **`run`** (`{id, scheduled, sources, errors, costUsd}`) is a collector reporting
+  itself, so a run that found nothing or failed still shows. The app counts what it
+  took in from the file itself. Two reports with the same `id` (the skill's, then
+  the scheduler's) merge. The morning pick shows one line about the last run, and a
+  problem, or a scheduled run missing on a weekday after 08:30, shows under Today.
 - A top-level array of entries also works.
 - Write `name.json.tmp` and then rename it to `name.json`. Files ending in `.tmp` are
   ignored.
@@ -156,9 +161,17 @@ so the collector can learn what is worth suggesting. An optional
 
 The Claude Code skill in `skills/floatnote/` writes these files. It has two modes:
 capture ("add X to FloatNote") and collect, which reads sent mail and
-Awaiting-their-reply threads (read-only) for promises, waiting items, replies and
-things already done. `docs/INTAKE.md` is the design. Install it with
+Awaiting-their-reply threads (read-only), and "blocked on Daniel" lines in the
+project checkpoints, for promises, waiting items, blocked items, replies and things
+already done. `docs/INTAKE.md` is the design. Install it with
 `npm run install-skill`.
+
+Collect also runs on a schedule, weekdays at 07:15: `tools/collector/install-task.ps1`
+registers the task `FloatNoteCollector` (`-Remove` takes it away), and
+`tools/collector/run.ps1` is what it runs. Gmail stays read-only by permission,
+not by instruction: the run refuses every tool not on its allowlist, which holds
+three Gmail reads and a write limited to the inbox folder. Logs go to
+`collector-logs/` in the data folder, 30 days kept.
 
 ## Notes and Habits
 
