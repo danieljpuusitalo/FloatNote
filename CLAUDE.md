@@ -1,12 +1,13 @@
 # FloatNote: standing instructions
 
-Electron always-on-top window, being rebuilt (branch `v2`) from a notepad with a
+Electron always-on-top window, rebuilt in 2.0.0 from a notepad with a
 checklist into a to-do system: four lists (Today / Next / Waiting / Later), a
 morning pick, global-hotkey capture, per-record Firebase sync, and a drop folder
 Claude writes suggestions into. Notes and Habits stay as secondary tabs.
 Distributed as local Windows installers; nothing is deployed, no store listing.
 
-The plan this branch follows: `~/.claude/plans/stateful-nibbling-minsky.md`.
+The design for how to-dos flow in is `docs/INTAKE.md`. The original v2 plan:
+`~/.claude/plans/stateful-nibbling-minsky.md`.
 
 A separate macOS port lives at `~/FloatNote-mac` (v1, out of scope) and a
 Firebase-backed web/PWA port at `~/FloatNote-web`. They are independent codebases,
@@ -82,11 +83,13 @@ features and the drop-folder format; version in `package.json`.
   not add another way for main to change state that skips it.
 - **The `floatnote` Claude skill's source is `skills/floatnote/SKILL.md` here.**
   `~/.claude/skills/` is not in the `~/.claude` repo's allowlist, so the copy there
-  is unversioned. Edit the repo copy, then `npm run install-skill`. The installed
-  app stays v1 until a v2 release, and v1 never reads the drop folder; the skill
-  checks `schemaVersion` and stops.
-- **`dist/` is gitignored, so installers are never committed**, and the newest built
-  installer on disk is `1.3.1`. Do not infer the shipped version from `dist/`.
+  is unversioned. Edit the repo copy, then `npm run install-skill`. The skill
+  checks `schemaVersion` and stops on v1 data, which never reads the drop folder.
+- **Daniel runs the installed build** (`%LOCALAPPDATA%Programsloatnote`), not
+  this repo. A code change reaches him only through a release and install.
+- **`dist/` is gitignored, so installers are never committed**, and `dist/` holds whatever
+  was built last, released or not. Do not infer the shipped version from it; the
+  installed exe's version is the truth.
 - **Firebase config is hardcoded and committed** (project `floatnote-app`,
   europe-west1 RTDB, anonymous auth). Client identifiers, not secrets; the database
   *rules* are the security boundary, and they live only in the Firebase console.

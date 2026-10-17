@@ -1,7 +1,7 @@
 {
   "name": "floatnote",
-  "version": "1.4.0",
-  "description": "Floating notepad with checklist, habit tracker, configurable dashboard, and cross-device sync",
+  "version": "2.0.0",
+  "description": "Always-on-top to-do list: Today, Next, Waiting, Later, a morning pick, hotkey capture, sync, and a drop folder for Claude",
   "main": "main.js",
   "repository": {
     "type": "git",
@@ -19,12 +19,11 @@
   "keywords": [
     "electron",
     "desktop",
-    "notepad",
+    "to-do",
     "productivity",
     "floating",
-    "checklist",
-    "habit-tracker",
-    "dashboard"
+    "gtd",
+    "habit-tracker"
   ],
   "author": "Daniel J Puusitalo",
   "license": "MIT",
