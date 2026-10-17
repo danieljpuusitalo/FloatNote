@@ -234,6 +234,11 @@
     return items;
   }
 
+  function todayCapOf(state) {
+    const n = Math.round(Number(state.preferences && state.preferences.todayCap));
+    return Number.isFinite(n) ? Math.min(5, Math.max(1, n)) : DEFAULT_PREFS.todayCap;
+  }
+
   function openCount(state, list) {
     return Object.values(state.items).filter(i => i.list === list && !isDone(i)).length;
   }
@@ -247,6 +252,7 @@
     item.doneAt = t;
     item.touchedAt = t;
     delete item.suggested;
+    delete item.closeHint;
     state.completions['c_' + id] = { date: dateStr(t), ctx: item.ctx, text: item.text };
   }
 
@@ -306,33 +312,105 @@
   }
 
   // ---------- Claude drop-folder suggestions ----------
+  //
+  // Claude writes JSON files into <data dir>/inbox/; main reads each one with
+  // ingestInbox. Two kinds of entry:
+  //   { text, who?, due?, ctx?, list?: 'next'|'waiting', note?, source?: {url,label}, key? }
+  //     → a suggested item, shown under Suggested until kept or dropped.
+  //   { done: '<item id>', why, source? }
+  //     → a close hint on an open item ("looks done: <why>"), Done or Not yet.
+  // The payload is an array of entries, or { items: [...], done: [...] }.
+  //
+  // seen (key → { t }) remembers every suggestion ever taken in, so a second
+  // sweep of the same mail does not bring back what was already kept or dropped.
 
-  function ingestSuggestions(state, payload, now) {
-    const arr = Array.isArray(payload) ? payload : (payload && Array.isArray(payload.items) ? payload.items : []);
-    const added = [];
-    const existing = new Set(Object.values(state.items).filter(i => !isDone(i)).map(i => i.text.toLowerCase()));
-    for (const raw of arr) {
-      if (!raw || typeof raw.text !== 'string' || !raw.text.trim()) continue;
-      const text = raw.text.trim().slice(0, 500);
-      if (existing.has(text.toLowerCase())) continue;
-      const source = raw.source && typeof raw.source.url === 'string' && /^https?:\/\//.test(raw.source.url)
-        ? { url: raw.source.url, label: typeof raw.source.label === 'string' ? raw.source.label : raw.source.url }
-        : undefined;
+  function cleanSource(src) {
+    return src && typeof src.url === 'string' && /^https?:\/\//i.test(src.url)
+      ? { url: src.url.slice(0, 2000), label: (typeof src.label === 'string' && src.label.trim() ? src.label.trim() : src.url).slice(0, 200) }
+      : undefined;
+  }
+
+  function normText(s) { return String(s).trim().toLowerCase().replace(/\s+/g, ' '); }
+
+  function suggestionKey(raw) {
+    if (typeof raw.key === 'string' && raw.key.trim()) return 'k:' + raw.key.trim().slice(0, 200);
+    const src = cleanSource(raw.source);
+    return (src ? src.url + '|' : '') + normText(raw.text);
+  }
+
+  function inboxEntries(payload) {
+    if (Array.isArray(payload)) return payload;
+    if (!payload || typeof payload !== 'object') return [];
+    return [].concat(Array.isArray(payload.items) ? payload.items : [], Array.isArray(payload.done) ? payload.done : []);
+  }
+
+  function ingestInbox(state, payload, now, seen) {
+    const t = typeof now === 'number' ? now : (now || new Date()).getTime();
+    seen = seen || {};
+    const out = { added: [], direct: [], hinted: [], skipped: [] };
+    const skip = (raw, reason) => out.skipped.push({ text: raw && typeof raw === 'object' ? String(raw.text || raw.done || '').slice(0, 80) : '', reason });
+    const open = Object.values(state.items).filter(i => !isDone(i));
+    const existing = new Set(open.map(i => normText(i.text)));
+    for (const raw of inboxEntries(payload)) {
+      if (!raw || typeof raw !== 'object') { skip(raw, 'not an object'); continue; }
+
+      if (typeof raw.done === 'string') {
+        const item = state.items[raw.done];
+        const why = typeof raw.why === 'string' ? raw.why.trim().slice(0, 300) : '';
+        if (!item || item.deleted) { skip(raw, 'no such item'); continue; }
+        if (isDone(item)) { skip(raw, 'already done'); continue; }
+        if (!why) { skip(raw, 'a done hint needs a why'); continue; }
+        const source = cleanSource(raw.source);
+        const key = 'done:' + raw.done + '|' + (source ? source.url : normText(why));
+        if (seen[key]) { skip(raw, 'already hinted'); continue; }
+        seen[key] = { t };
+        item.closeHint = { why, at: t };
+        if (source) item.closeHint.source = source;
+        out.hinted.push(item.id);
+        continue;
+      }
+
+      if (typeof raw.text !== 'string' || !raw.text.trim()) { skip(raw, 'no text'); continue; }
+      const text = raw.text.trim().replace(/\s+/g, ' ').slice(0, 500);
+      const key = suggestionKey(raw);
+      if (seen[key]) { skip(raw, 'already suggested before'); continue; }
+      if (existing.has(normText(text))) { skip(raw, 'already on a list'); seen[key] = { t }; continue; }
+      // direct: Daniel asked for this item himself ("add X to FloatNote"), so it
+      // goes straight onto its list. Anything Claude found on its own is a
+      // suggestion, and only Next or Waiting. Today is honoured while it has room.
+      const direct = raw.direct === true;
+      let list = raw.list === 'waiting' ? 'waiting' : 'next';
+      if (direct && raw.list === 'later') list = 'later';
+      if (direct && raw.list === 'today' && openCount(state, 'today') < todayCapOf(state)) list = 'today';
       const item = makeItem({
         text,
         ctx: raw.ctx,
-        list: raw.list === 'waiting' ? 'waiting' : 'next',
+        list,
         due: raw.due,
-        who: typeof raw.who === 'string' ? raw.who : undefined,
-        note: typeof raw.note === 'string' ? raw.note : undefined,
-        source,
-        suggested: true
-      }, now);
+        who: typeof raw.who === 'string' && raw.who.trim() ? raw.who.trim().slice(0, 80) : undefined,
+        note: typeof raw.note === 'string' && raw.note.trim() ? raw.note.trim().slice(0, 1000) : undefined,
+        source: cleanSource(raw.source),
+        suggested: !direct
+      }, t);
       state.items[item.id] = item;
-      existing.add(text.toLowerCase());
-      added.push(item.id);
+      existing.add(normText(text));
+      seen[key] = { t };
+      out.added.push(item.id);
+      if (direct) out.direct.push(item.id);
     }
-    return added;
+    return out;
+  }
+
+  // Forget suggestion keys older than this, so the seen file cannot grow forever.
+  function pruneSeen(seen, now, days) {
+    const cutoff = now - (days || 180) * DAY_MS;
+    for (const k of Object.keys(seen)) if (!seen[k] || !(seen[k].t >= cutoff)) delete seen[k];
+    return seen;
+  }
+
+  // The suggestions alone, with nothing remembered between calls.
+  function ingestSuggestions(state, payload, now) {
+    return ingestInbox(state, payload, now, {}).added;
   }
 
   // ---------- state shape and migration ----------
@@ -629,7 +707,7 @@
     compareNext, listItems, openCount,
     completeItem, uncompleteItem, doneOn, streak,
     startDay, needsPick, carryOvers,
-    ingestSuggestions,
+    ingestSuggestions, ingestInbox, suggestionKey, pruneSeen,
     emptyState, normalizeState, isV1, migrateV1,
     toRecords, applyPath, applyPatch, recordHashes, applyPatchIfUnchanged,
     stamp, toWire, wireValue, applyRemote, localIsNewer, newerThanRemote, purgeTombstones,

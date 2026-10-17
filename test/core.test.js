@@ -324,6 +324,92 @@ test('suggestions: accepts { items: [...] } too', () => {
   assert.equal(C.ingestSuggestions(s, { items: [{ text: 'a' }] }, T).length, 1);
 });
 
+test('inbox: a second sweep of the same mail does not bring back a kept or dropped suggestion', () => {
+  const s = C.emptyState();
+  const seen = {};
+  const entry = { text: 'Send the cap table to Rui', source: { url: 'https://mail.example.com/t/9', label: 'Re: cap table' } };
+  const first = C.ingestInbox(s, [entry], T, seen);
+  assert.equal(first.added.length, 1);
+  delete s.items[first.added[0]];                       // dropped
+  const again = C.ingestInbox(s, [entry], T + DAY, seen);
+  assert.equal(again.added.length, 0);
+  assert.deepEqual(again.skipped.map(x => x.reason), ['already suggested before']);
+  // The same words from a different thread are a different suggestion.
+  const other = C.ingestInbox(s, [{ text: entry.text, source: { url: 'https://mail.example.com/t/10' } }], T + DAY, seen);
+  assert.equal(other.added.length, 1);
+});
+
+test('inbox: an explicit key wins over text, so a reworded suggestion still dedupes', () => {
+  const s = C.emptyState();
+  const seen = {};
+  C.ingestInbox(s, [{ text: 'Reply to Mo about the data room', key: 'msg-17' }], T, seen);
+  const r = C.ingestInbox(s, [{ text: 'Answer Mo re data room access', key: 'msg-17' }], T, seen);
+  assert.equal(r.added.length, 0);
+});
+
+test('inbox: done hints land on open items only, and need a reason', () => {
+  const s = stateWith([C.makeItem({ id: 'a', text: 'Send memo' }, T), C.makeItem({ id: 'b', text: 'Book room' }, T)]);
+  C.completeItem(s, 'b', T);
+  const seen = {};
+  const r = C.ingestInbox(s, { done: [
+    { done: 'a', why: 'You sent the memo on 30 Sep', source: { url: 'https://mail.example.com/t/3', label: 'Memo' } },
+    { done: 'b', why: 'x' },
+    { done: 'zzz', why: 'x' },
+    { done: 'a', why: '' }
+  ] }, T, seen);
+  assert.deepEqual(r.hinted, ['a']);
+  assert.equal(s.items.a.closeHint.why, 'You sent the memo on 30 Sep');
+  assert.equal(s.items.a.closeHint.source.label, 'Memo');
+  assert.deepEqual(r.skipped.map(x => x.reason), ['already done', 'no such item', 'a done hint needs a why']);
+  delete s.items.a.closeHint;                            // "Not yet"
+  const again = C.ingestInbox(s, [{ done: 'a', why: 'You sent the memo on 30 Sep', source: { url: 'https://mail.example.com/t/3' } }], T, seen);
+  assert.equal(again.hinted.length, 0, 'a dismissed hint does not come back for the same source');
+  assert.equal(s.items.a.closeHint, undefined);
+});
+
+test('inbox: ticking an item clears its done hint', () => {
+  const s = stateWith([C.makeItem({ id: 'a', text: 'Send memo' }, T)]);
+  C.ingestInbox(s, [{ done: 'a', why: 'Sent' }], T, {});
+  assert.ok(s.items.a.closeHint);
+  C.completeItem(s, 'a', T);
+  assert.equal(s.items.a.closeHint, undefined);
+});
+
+test('inbox: a mixed array, and fields are trimmed and bounded', () => {
+  const s = C.emptyState();
+  const r = C.ingestInbox(s, [
+    { text: '  Chase   Ines  ', who: '  Ines ', list: 'waiting' },
+    { done: 'nope', why: 'x' },
+    'string entry'
+  ], T, {});
+  const it = s.items[r.added[0]];
+  assert.equal(it.text, 'Chase Ines');
+  assert.equal(it.who, 'Ines');
+  assert.equal(it.list, 'waiting');
+  assert.equal(r.skipped.length, 2);
+});
+
+test('inbox: a direct add skips Suggested, and Today only while it has room', () => {
+  const s = C.emptyState();
+  s.preferences.todayCap = 1;
+  const r = C.ingestInbox(s, [
+    { text: 'Call the notary', direct: true, list: 'today' },
+    { text: 'Renew the domain', direct: true, list: 'today' },
+    { text: 'Read the Q3 letter', direct: true, list: 'later' },
+    { text: 'Chase the auditor', list: 'later' }
+  ], T, {});
+  const items = r.added.map(id => s.items[id]);
+  assert.deepEqual(items.map(i => i.list), ['today', 'next', 'later', 'next']);
+  assert.deepEqual(items.map(i => !!i.suggested), [false, false, false, true]);
+  assert.equal(r.direct.length, 3);
+});
+
+test('inbox: seen keys older than the window are forgotten', () => {
+  const seen = { old: { t: T - 200 * DAY }, recent: { t: T - DAY }, junk: null };
+  C.pruneSeen(seen, T);
+  assert.deepEqual(Object.keys(seen), ['recent']);
+});
+
 // ---------- records and stamping ----------
 
 test('records round-trip through applyPatch', () => {

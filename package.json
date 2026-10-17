@@ -13,7 +13,8 @@
     "test": "node --test",
     "build": "electron-builder --win --x64 && electron-builder --win --arm64",
     "build:x64": "electron-builder --win --x64",
-    "build:arm64": "electron-builder --win --arm64"
+    "build:arm64": "electron-builder --win --arm64",
+    "install-skill": "node -e \"const fs=require('fs'),path=require('path'),d=path.join(require('os').homedir(),'.claude','skills','floatnote');fs.mkdirSync(d,{recursive:true});fs.copyFileSync('skills/floatnote/SKILL.md',path.join(d,'SKILL.md'));console.log('installed to '+d)\""
   },
   "keywords": [
     "electron",

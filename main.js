@@ -20,6 +20,8 @@ const WINDOW_PATH = path.join(DATA_DIR, 'floatnote-window.json');
 const SYNC_PATH = path.join(DATA_DIR, 'floatnote-sync.json');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 const BACKUP_KEEP = 14;
+const INBOX_DIR = path.join(DATA_DIR, 'inbox');
+const INBOX_SEEN_PATH = path.join(DATA_DIR, 'inbox-seen.json');
 
 // ---------- files ----------
 
@@ -155,14 +157,128 @@ function setupSync() {
       C.applyPatch(state, patch);
       writeJsonAtomic(DATA_PATH, state);
       writeJsonAtomic(CLOCK_PATH, clock);
-      if (!Object.keys(patch).length) return;
-      const seq = ++patchSeq;
-      unseen.push({ seq, patch, before });
-      send('remote-patch', patch, seq, before);
+      sendPatch(patch, before);
     },
     onStatus: () => send('info', info())
   });
   sync.start(readPassphrase());
+}
+
+// Hand the renderer a change main made itself, the same way as a remote one:
+// it applies the patch only to records it has not edited since.
+function sendPatch(patch, before) {
+  if (!Object.keys(patch).length) return;
+  const seq = ++patchSeq;
+  unseen.push({ seq, patch, before });
+  send('remote-patch', patch, seq, before);
+}
+
+// ---------- inbox: suggestions dropped in by Claude ----------
+//
+// Any *.json in <data dir>/inbox is read, turned into suggested items or
+// "looks done" hints (core.ingestInbox), and deleted. Writers write a .tmp and
+// rename it, but a file caught mid-write is retried rather than rejected until
+// it is INBOX_SETTLE_MS old. Every file leaves a line in inbox/processed.log;
+// one that cannot be used moves to inbox/rejected/ with the reason beside it.
+// inbox-seen.json remembers what was suggested, so a later sweep of the same
+// mail does not bring back something already kept or dropped.
+
+const INBOX_SETTLE_MS = 10000;
+const INBOX_MAX_BYTES = 1024 * 1024;
+const INBOX_LOG_MAX_BYTES = 512 * 1024;
+let inboxTimer = null;
+let inboxRetry = null;
+
+function inboxLog(entry) {
+  const file = path.join(INBOX_DIR, 'processed.log');
+  try {
+    if (fs.existsSync(file) && fs.statSync(file).size > INBOX_LOG_MAX_BYTES) fs.renameSync(file, file + '.1');
+    fs.appendFileSync(file, JSON.stringify(Object.assign({ at: new Date().toISOString() }, entry)) + '\n');
+  } catch (err) { console.warn('FloatNote: inbox log', err.message); }
+}
+
+function rejectInboxFile(name, reason) {
+  const dir = path.join(INBOX_DIR, 'rejected');
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    const target = path.join(dir, Date.now() + '-' + name);
+    fs.renameSync(path.join(INBOX_DIR, name), target);
+    fs.writeFileSync(target + '.why.txt', reason + '\n');
+  } catch (err) { console.warn('FloatNote: inbox reject', err.message); }
+  inboxLog({ file: name, rejected: reason });
+}
+
+function processInbox() {
+  if (!state) return;
+  let names;
+  try {
+    fs.mkdirSync(INBOX_DIR, { recursive: true });
+    names = fs.readdirSync(INBOX_DIR).filter(f => /\.json$/i.test(f)).sort();
+  } catch (err) { return; }
+  if (!names.length) return;
+
+  const seen = C.pruneSeen(readJson(INBOX_SEEN_PATH) || {}, Date.now());
+  const before = C.recordHashes(state, Object.keys(C.toRecords(state)));
+  const added = [];
+  const direct = [];
+  const hinted = [];
+  let retry = false;
+  for (const name of names) {
+    const file = path.join(INBOX_DIR, name);
+    let stat, payload;
+    try { stat = fs.statSync(file); } catch { continue; }
+    if (!stat.isFile()) continue;
+    if (stat.size > INBOX_MAX_BYTES) { rejectInboxFile(name, 'larger than 1 MB'); continue; }
+    try {
+      // PowerShell writes a byte-order mark; JSON.parse does not accept one.
+      payload = JSON.parse(fs.readFileSync(file, 'utf-8').replace(/^﻿/, ''));
+    } catch (err) {
+      if (Date.now() - stat.mtimeMs < INBOX_SETTLE_MS) { retry = true; continue; }
+      rejectInboxFile(name, 'not valid JSON: ' + err.message);
+      continue;
+    }
+    const r = C.ingestInbox(state, payload, Date.now(), seen);
+    added.push(...r.added);
+    direct.push(...r.direct);
+    hinted.push(...r.hinted);
+    try { fs.unlinkSync(file); } catch (err) { console.warn('FloatNote: inbox delete', err.message); }
+    inboxLog({ file: name, added: r.added.length, direct: r.direct.length, hinted: r.hinted.length, skipped: r.skipped });
+  }
+  writeJsonAtomic(INBOX_SEEN_PATH, seen);
+  if (retry) { clearTimeout(inboxRetry); inboxRetry = setTimeout(processInbox, INBOX_SETTLE_MS + 500); }
+  if (!added.length && !hinted.length) return;
+
+  const records = C.toRecords(state);
+  const patch = {};
+  const was = {};
+  for (const id of new Set([...added, ...hinted])) {
+    const p = 'items/' + id;
+    patch[p] = records[p];
+    if (p in before) was[p] = before[p];
+  }
+  dailyBackup();
+  writeJsonAtomic(DATA_PATH, state);
+  const changed = C.stamp(clock, records, Date.now());
+  if (changed.length) writeJsonAtomic(CLOCK_PATH, clock);
+  if (sync) sync.push(changed);
+  sendPatch(patch, was);
+  send('inbox', { added: added.length, direct: direct.length, hinted: hinted.length });
+}
+
+function scheduleInbox() {
+  clearTimeout(inboxTimer);
+  inboxTimer = setTimeout(processInbox, 300);
+}
+
+// fs.watch is the fast path; the poll covers the cases it misses (it can stop
+// firing after sleep, and is not guaranteed on every filesystem).
+function watchInbox() {
+  fs.mkdirSync(INBOX_DIR, { recursive: true });
+  try {
+    fs.watch(INBOX_DIR, (_type, name) => { if (!name || /\.json$/i.test(name)) scheduleInbox(); })
+      .on('error', err => console.warn('FloatNote: inbox watch', err.message));
+  } catch (err) { console.warn('FloatNote: inbox watch', err.message); }
+  setInterval(processInbox, 60000);
 }
 
 // ---------- window ----------
@@ -361,6 +477,10 @@ if (!app.requestSingleInstanceLock()) {
     createCaptureWindow();
     registerHotkey(state.preferences.hotkey || C.DEFAULT_PREFS.hotkey);
     setupSync();
+    watchInbox();
+    // Anything that arrived while FloatNote was closed: wait for the window, so
+    // the "Claude suggested" note has somewhere to show.
+    mainWindow.webContents.once('did-finish-load', () => setTimeout(processInbox, 1500));
   });
 
   app.on('will-quit', () => globalShortcut.unregisterAll());

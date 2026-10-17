@@ -15,8 +15,10 @@ contextBridge.exposeInMainWorld('api', {
   // Main asks for the pending debounced save before quitting; reply with flushed().
   onFlush: (callback) => ipcRenderer.on('flush', () => callback()),
   flushed: () => ipcRenderer.send('flushed'),
-  // Records changed by another device: { path → value | null }.
+  // Records changed by another device, or by the inbox: { path → value | null }.
   onRemotePatch: (callback) => ipcRenderer.on('remote-patch', (_e, patch, seq, before) => callback(patch, seq, before)),
+  // The inbox took in suggestions: { added, hinted } counts.
+  onInbox: (callback) => ipcRenderer.on('inbox', (_e, n) => callback(n)),
   // Settings: sync status and the live hotkey. The passphrase only ever goes in.
   getInfo: () => ipcRenderer.invoke('get-info'),
   onInfo: (callback) => ipcRenderer.on('info', (_e, info) => callback(info)),

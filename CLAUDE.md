@@ -17,16 +17,24 @@ not build targets of this one.
 **`npm test`** — `node --test` over `test/`. `core.test.js` covers `core.js`: capture
 parsing, v1→v2 migration, records/stamp/merge, the patch window (a remote change
 must not undo an unsaved or in-flight local edit), carry-over, staleness, streak,
-suggestion intake. `sync.test.js` drives `sync.js` against an in-memory server:
+drop-folder intake (suggestions, direct adds, done hints, dedupe). `sync.test.js` drives `sync.js` against an in-memory server:
 convergence, deletes, unticks, reconnect catch-up, tombstone purge, errors. Both
 carry negative controls.
 
 It covers the logic, not the UI. Anything about `index.html` or the window is a
 hand-check (`npm start`, see the data-dir trap below). Say which one a claim is.
 
+A hand-check can be driven without touching the real desktop: launch
+`node_modules/electron/dist/electron.exe . --remote-debugging-port=9333` with
+`FLOATNOTE_DATA_DIR` set to a scratch dir of invented data, then evaluate JS in the
+page over the DevTools protocol (`http://127.0.0.1:9333/json` lists the targets;
+skip the `#capture` one). Set `meta.lastPick` to today in the fixture, or the
+morning pick covers the list.
+
 ## Where state lives
 
-`README.md` for features; version in `package.json`. No checkpoint file yet.
+`CHECKPOINT.md`: where the v2 branch stands and what is next. `README.md` for
+features and the drop-folder format; version in `package.json`.
 
 ## Hard rules
 
@@ -61,7 +69,18 @@ hand-check (`npm start`, see the data-dir trap below). Say which one a claim is.
 - Data files in the data dir: `floatnote-data.json` (state, `schemaVersion: 2`),
   `floatnote-clock.json` (per-record sync timestamps and tombstones; deleting it
   makes every record look new), `floatnote-window.json`, `floatnote-sync.json`
-  (passphrase; never print it), `backups/` (one per day, 14 kept).
+  (passphrase; never print it), `backups/` (one per day, 14 kept), `inbox/`
+  (the drop folder, with `processed.log` and `rejected/`), `inbox-seen.json`
+  (what was suggested before; deleting it lets old suggestions come back).
+- **The drop folder is read by main, which then edits state itself.** That is the
+  one place main changes state on its own, and it goes through the same patch path
+  as a remote change (`sendPatch`), so an unsaved edit in the renderer wins. Do
+  not add another way for main to change state that skips it.
+- **The `floatnote` Claude skill's source is `skills/floatnote/SKILL.md` here.**
+  `~/.claude/skills/` is not in the `~/.claude` repo's allowlist, so the copy there
+  is unversioned. Edit the repo copy, then `npm run install-skill`. The installed
+  app stays v1 until a v2 release, and v1 never reads the drop folder; the skill
+  checks `schemaVersion` and stops.
 - **`dist/` is gitignored, so installers are never committed**, and the newest built
   installer on disk is `1.3.1`. Do not infer the shipped version from `dist/`.
 - **Firebase config is hardcoded and committed** (project `floatnote-app`,

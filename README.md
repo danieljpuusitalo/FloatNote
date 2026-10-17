@@ -62,6 +62,50 @@ FloatNote is a productivity scratchpad with notes, checklists, habit tracking, a
 
 ---
 
+## Drop folder (v2)
+
+Anything that can write a file can hand FloatNote to-dos. FloatNote watches
+`%APPDATA%\FloatNote\inbox\`. Each `*.json` file there is read within a second (and
+on the next launch if the app was closed), added, and deleted.
+
+```json
+{
+  "items": [
+    { "text": "Send Rui the revised cap table", "who": "Rui", "due": "2026-10-24",
+      "note": "\"I'll send it over by Friday.\"",
+      "source": { "url": "https://mail.google.com/mail/u/0/#all/abc", "label": "Re: cap table" } }
+  ],
+  "done": [
+    { "done": "<item id>", "why": "You sent the cap table on 15 Oct" }
+  ]
+}
+```
+
+- **`items`** arrive under **Suggested**, in Next (or Waiting, with `"list": "waiting"`),
+  and are kept with Enter or dropped with Delete. Other fields: `ctx` (`work` or
+  `personal`), `who`, `due` (`YYYY-MM-DD`), `note`, `source` (`{url, label}`), and
+  `key` (a stable id for dedupe). `"direct": true` means the person asked for this
+  item themselves. It skips Suggested and may also use `later`, or `today` if Today
+  has room.
+- **`done`** entries put a "Looks done: ..." line on an open item, with **Done** and
+  **Not yet**. Nothing is ticked without a click.
+- A top-level array of entries also works.
+- Write `name.json.tmp` and then rename it to `name.json`. Files ending in `.tmp` are
+  ignored.
+- Nothing comes back twice. `inbox-seen.json` remembers every suggestion for 180
+  days, kept or dropped, by `key` or by source url plus text. Text that matches an
+  open item is skipped.
+- Every file leaves a line in `inbox/processed.log`, listing what was added and
+  what was skipped and why. A file that is not valid JSON after 10 seconds, or is
+  over 1 MB, moves to `inbox/rejected/` with a `.why.txt` beside it.
+
+The Claude Code skill in `skills/floatnote/` writes these files. It has three modes:
+capture ("add X to FloatNote"), an email sweep for promises and asks (shown for
+confirmation, every item quoting its sentence), and close-out. Install it with
+`npm run install-skill`.
+
+---
+
 ## Getting Started
 
 ```bash
