@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>Daniel's Anti-Notion FloatNote</title>
   <script>if (location.hash === '#capture') document.documentElement.classList.add('capture');</script>
   <style>
@@ -536,6 +537,11 @@
     }
     .badge.who { color: var(--blue); }
     .badge.who.chase { color: var(--yellow); border-color: rgba(255, 209, 128, 0.3); }
+    /* --yellow is too pale to read on white */
+    .paperwhite .badge.who.chase, .paperwhite .badge.carried, .paperwhite .badge.due:not(.overdue) { color: #85651a; }
+    .paperwhite .badge.who.chase { border-color: rgba(133, 101, 26, 0.35); }
+    .badge.replied { color: var(--green); border-color: rgba(109, 212, 160, 0.3); cursor: pointer; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+    .badge.kind { color: var(--text-secondary); }
     .badge.carried { color: var(--yellow); }
     .badge.stale { color: var(--text-muted); }
     .badge.source {
@@ -550,7 +556,6 @@
     }
     .todo-note { cursor: pointer; }
     .todo-note.open { display: block; -webkit-line-clamp: unset; }
-    .todo-item.suggested .todo-note { border-left: 2px solid var(--border-light); padding-left: 6px; font-style: italic; }
     .close-hint {
       display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 4px;
       font-size: 11px; color: var(--green, #69f0ae); line-height: 1.4;
@@ -562,7 +567,6 @@
       padding-left: 8px; background: var(--bg-surface); border-radius: 6px;
     }
     .todo-item:hover .todo-actions { display: flex; }
-    .todo-item.suggested .todo-actions { display: flex; position: static; background: none; padding: 0; }
     .act {
       background: var(--bg-surface); border: 1px solid var(--border-light); color: var(--text-secondary);
       font-family: inherit; font-size: 10px; font-weight: 600; padding: 2px 7px;
@@ -637,6 +641,13 @@
     .pick-row .num { font-size: 10px; color: var(--text-muted); width: 10px; text-align: right; flex-shrink: 0; margin-top: 2px; }
     .pick-row .t { flex: 1; min-width: 0; overflow-wrap: break-word; line-height: 1.4; }
     .pick-foot { text-align: center; margin-top: 10px; }
+    .pick-note {
+      font-size: 11px; color: var(--text-secondary); line-height: 1.45; margin: -6px 0 14px; white-space: pre-wrap;
+      border-left: 2px solid var(--border-light); padding-left: 8px; font-style: italic; max-height: 120px; overflow-y: auto;
+    }
+    .pick-slid { font-size: 11px; color: var(--text-muted); margin: -6px 0 10px; }
+    .card-btn:disabled { opacity: 0.35; cursor: default; }
+    .sugg-line { font-size: 11.5px; color: var(--text-secondary); padding: 4px 2px 6px; }
 
     /* Settings */
     .settings-overlay { z-index: 920; }
@@ -1172,6 +1183,7 @@
       <div class="set-sec">
         <label class="set-check"><input type="checkbox" id="login-check"> Start FloatNote when Windows starts</label>
         <div class="set-note" id="login-note"></div>
+        <label class="set-check"><input type="checkbox" id="ontop-check"> Keep FloatNote above other windows</label>
       </div>
       <div class="set-sec">
         <div class="set-label">Keyboard</div>
@@ -1190,17 +1202,21 @@
         <div class="set-label">On the list</div>
         <kbd>↑ ↓</kbd><span>Select a to-do</span>
         <kbd>Space</kbd><span>Tick or untick (also X)</span>
-        <kbd>Enter</kbd><span>Edit (also E). On a suggestion, Keep</span>
+        <kbd>Enter</kbd><span>Edit (also E)</span>
         <kbd>T</kbd><span>Move to Today, or back to Next</span>
         <kbd>W</kbd><span>Move to Waiting, or back to Next</span>
         <kbd>L</kbd><span>Move to Later, or back to Next</span>
         <kbd>P</kbd><span>Switch work and personal</span>
         <kbd>D</kbd><span>Set the due date</span>
         <kbd>Del</kbd><span>Drop</span>
-        <kbd>Ctrl Z</kbd><span>Undo a drop</span>
+        <kbd>Ctrl Z</kbd><span>Undo a drop (for 10 seconds)</span>
         <kbd>Esc</kbd><span>Clear the selection</span>
         <kbd>N</kbd><span>New to-do (also /)</span>
         <kbd>K L D</kbd><span>Keep, Later, Drop on the "Still doing this?" card, when nothing is selected</span>
+        <div class="set-label">In the morning pick</div>
+        <kbd>C N D</kbd><span>Carry, back to Next, Drop an unfinished Today item</span>
+        <kbd>K T D</kbd><span>Keep, straight to Today, Drop a suggestion (S decides later)</span>
+        <kbd>1–9</kbd><span>Pick from Next; Enter starts the day</span>
         <div class="set-label">While typing a to-do</div>
         <kbd>@Anna</kbd><span>Who it is with</span>
         <kbd>fri</kbd><span>Due date: a day, "tomorrow", or 12/10</span>
@@ -1280,8 +1296,8 @@
       if (!undoStack.length) return false;
       redoStack.push(editor.innerHTML);
       const prev = undoStack.pop();
-      editor.innerHTML = prev;
-      state.notes[activeNotesCategory] = prev;
+      editor.innerHTML = sanitizeNotes(prev);
+      state.notes[activeNotesCategory] = editor.innerHTML;
       scheduleSave();
       return true;
     }
@@ -1291,8 +1307,8 @@
       if (!redoStack.length) return false;
       undoStack.push(editor.innerHTML);
       const next = redoStack.pop();
-      editor.innerHTML = next;
-      state.notes[activeNotesCategory] = next;
+      editor.innerHTML = sanitizeNotes(next);
+      state.notes[activeNotesCategory] = editor.innerHTML;
       scheduleSave();
       return true;
     }
@@ -1316,7 +1332,7 @@
         }
       });
 
-      document.getElementById('notes-editor').innerHTML = state.notes[activeNotesCategory] || '';
+      document.getElementById('notes-editor').innerHTML = sanitizeNotes(state.notes[activeNotesCategory]);
       loaded = true;
       if (state.preferences.compact) document.body.classList.add('compact');
       renderTodo();
@@ -1344,8 +1360,32 @@
       return toDateStr(new Date());
     }
 
+    function onboardingShown() { return !document.getElementById('onboarding').classList.contains('hidden'); }
+
     function escapeHtml(str) {
-      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      return String(str == null ? '' : str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // Notes are HTML that arrives from disk, sync and rich paste. Nothing in
+    // them may run: no scripts or frames, no on* handlers, no javascript: links.
+    const NOTE_DROP = 'script,style,iframe,frame,frameset,object,embed,link,meta,base,form,svg,math,img,video,audio,source,template,textarea,select,button';
+    function sanitizeNotes(html) {
+      const tpl = document.createElement('template');
+      tpl.innerHTML = String(html == null ? '' : html);
+      const root = tpl.content;
+      root.querySelectorAll(NOTE_DROP).forEach(el => el.remove());
+      root.querySelectorAll('input').forEach(el => { if (el.type !== 'checkbox') el.remove(); });
+      root.querySelectorAll('*').forEach(el => {
+        for (const a of Array.from(el.attributes)) {
+          const n = a.name.toLowerCase();
+          if (n.startsWith('on')) el.removeAttribute(a.name);
+          else if ((n === 'href' || n === 'src' || n === 'xlink:href' || n === 'action' || n === 'formaction') &&
+            !/^(https?:|mailto:)/i.test(a.value.trim())) el.removeAttribute(a.name);
+        }
+      });
+      const div = document.createElement('div');
+      div.appendChild(root);
+      return div.innerHTML;
     }
 
     // --- Tabs ---
@@ -1372,7 +1412,7 @@
       activeNotesCategory = cat;
       document.getElementById('notes-cat-pro').className = 'cat-btn' + (cat === 'professional' ? ' active-pro' : '');
       document.getElementById('notes-cat-per').className = 'cat-btn' + (cat === 'personal' ? ' active-per' : '');
-      document.getElementById('notes-editor').innerHTML = state.notes[cat] || '';
+      document.getElementById('notes-editor').innerHTML = sanitizeNotes(state.notes[cat]);
       // Reset undo/redo stacks on category switch
       undoStack.length = 0;
       redoStack.length = 0;
@@ -2110,11 +2150,13 @@
 
     // --- Notes: paste handler (plain text by default) ---
     document.getElementById('notes-editor').addEventListener('paste', (e) => {
-      // Ctrl+Shift+V: allow rich paste (don't prevent default)
-      if (e.ctrlKey && e.shiftKey) return;
-      // Default: paste as plain text
       e.preventDefault();
-      const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+      const cd = e.clipboardData || window.clipboardData;
+      // Ctrl+Shift+V: rich paste, with anything that could run taken out
+      const rich = e.ctrlKey && e.shiftKey && cd.getData('text/html');
+      if (rich) { document.execCommand('insertHTML', false, sanitizeNotes(rich)); return; }
+      // Default: paste as plain text
+      const text = cd.getData('text/plain');
       document.execCommand('insertText', false, text);
     });
 
@@ -2463,6 +2505,11 @@
       } else if (item.who) {
         m += '<span class="badge who">@' + escapeHtml(item.who) + '</span>';
       }
+      // They answered a chase (the collector saw it): back in Next, marked.
+      if (item.replied && item.replied.why && !done) {
+        m += '<span class="badge replied" data-act="replied-ok" title="' + escapeHtml(item.replied.why) + ' (click to clear)">Replied: ' +
+          escapeHtml(item.replied.why) + '</span>' + sourceHtml(item.replied.source);
+      }
       if (item.list === 'today' && !done && item.carriedDays > 0) {
         m += '<span class="badge carried" title="Carried over from earlier days">' + ordinal(item.carriedDays + 1) + ' day</span>';
       }
@@ -2517,18 +2564,6 @@
       '</div>';
     }
 
-    function suggestedHtml(item, today, now) {
-      return '<div class="todo-item suggested" tabindex="0" data-id="' + escapeHtml(item.id) + '">' +
-        '<span class="ctx-dot' + (item.ctx === 'personal' ? ' personal' : '') + '" data-act="ctx" title="' +
-          (item.ctx === 'personal' ? 'Personal' : 'Work') + ' (click to switch)"></span>' +
-        '<div class="todo-body"><div class="todo-text" data-act="edit">' + escapeHtml(item.text) + '</div>' +
-          '<div class="todo-meta">' + (item.list === 'waiting' ? '<span class="badge">Waiting</span>' : '') +
-          metaHtml(item, today, now) + '</div>' + noteHtml(item) + '</div>' +
-        '<div class="todo-actions"><button class="act keep" data-act="keep" title="Keep (Enter)">Keep</button>' +
-          '<button class="act del" data-act="drop" title="Drop (Delete)">×</button></div>' +
-      '</div>';
-    }
-
     function triageState(now) {
       const today = FN.dateStr(now);
       const stale = FN.staleItems(state, now);
@@ -2574,6 +2609,10 @@
       const todayItems = FN.listItems(state, 'today', { today, ctx });
       html += '<div class="todo-section today" id="sec-today"><div class="section-head">Today <span class="count' +
         (open >= cap ? ' full' : '') + '">' + open + '/' + cap + '</span></div>';
+      // Suggestions are reviewed in the pick, never in a list of their own.
+      const nSugg = FN.pendingSuggestions(state).length;
+      if (nSugg) html += '<div class="sugg-line">' + nSugg + (nSugg === 1 ? ' suggestion' : ' suggestions') +
+        ' from Claude · <button class="link-btn" data-act="review">Review</button></div>';
       if (todayItems.length) {
         html += todayItems.map(i => itemHtml(i, today, now)).join('');
         if (!open && pickCandidates().length) {
@@ -2584,14 +2623,6 @@
       else if (!Object.keys(state.items).length) html += '<div class="empty-note">Type a to-do above. Add <b>!</b> to put it on Today, or add <b>@name</b> and a day like <b>fri</b>. Press <b>?</b> for the keys.</div>';
       else html += '<div class="empty-note">Nothing on Today.</div>';
       html += '</div>';
-
-      const sugg = Object.values(state.items)
-        .filter(i => i.suggested && !FN.isDone(i) && (!ctx || i.ctx === ctx))
-        .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-      if (sugg.length) {
-        html += '<div class="todo-section"><div class="section-head">Suggested <span class="count">' + sugg.length + '</span></div>' +
-          sugg.map(i => suggestedHtml(i, today, now)).join('') + '</div>';
-      }
 
       html += triageHtml(now);
 
@@ -2608,7 +2639,7 @@
           waiting.filter(i => !FN.isDone(i)).length + '</span></div>' + waiting.map(i => itemHtml(i, today, now)).join('') + '</div>';
       }
 
-      const later = FN.listItems(state, 'later', { today, ctx });
+      const later = FN.listItems(state, 'later', { today, ctx, suggested: false });
       if (later.length) {
         html += '<div class="todo-section"><div class="section-head toggle" data-act="toggle-later">' +
           (laterOpen ? '▾' : '▸') + ' Later <span class="count">' + later.filter(i => !FN.isDone(i)).length + '</span></div>' +
@@ -2624,22 +2655,18 @@
     }
 
     // --- To-do: keyboard selection ---
-    // One selected row, kept by id across renders. If that row goes away
-    // (dropped, filtered out, moved into a folded Later), the row now in its
-    // place is selected instead, so the keys keep working down the list.
+    // One selected row, kept by id across renders. If that row goes away on
+    // its own (synced, filtered out, moved into a folded Later) the selection
+    // clears: a key must never land on a row nobody chose. Keys that move the
+    // row themselves go through keepPlace, which picks the next one.
     let selId = null;
-    let selIdx = -1;
     // Visible rows only: compact mode hides every section but Today with CSS.
     function todoRows() { return Array.from(document.querySelectorAll('#todo-scroll .todo-item[data-id]')).filter(r => r.offsetParent); }
     function selRow() { return document.querySelector('#todo-scroll .todo-item.sel'); }
     function applySel(scroll) {
       const rows = todoRows();
-      let i = selId ? rows.findIndex(r => r.dataset.id === selId) : -1;
-      if (selId && i < 0) {
-        i = rows.length ? Math.min(selIdx, rows.length - 1) : -1;
-        selId = i >= 0 ? rows[i].dataset.id : null;
-      }
-      selIdx = i;
+      const i = selId ? rows.findIndex(r => r.dataset.id === selId) : -1;
+      if (i < 0) selId = null;
       rows.forEach((r, j) => r.classList.toggle('sel', j === i));
       if (scroll && i >= 0) rows[i].scrollIntoView({ block: 'nearest' });
     }
@@ -2649,7 +2676,6 @@
       let i = rows.findIndex(r => r.dataset.id === selId);
       i = i < 0 ? (d > 0 ? 0 : rows.length - 1) : Math.max(0, Math.min(rows.length - 1, i + d));
       selId = rows[i].dataset.id;
-      selIdx = i;
       applySel(true);
     }
     // Ticking or moving takes the row out of its place; the selection stays
@@ -2658,7 +2684,8 @@
       const before = todoRows().map(r => r.dataset.id);
       const i = before.indexOf(selId);
       const moved = selId;
-      fn();
+      // Refused (Today full, say): the row did not move, so neither does the selection.
+      if (fn() === false) { selId = moved; applySel(true); return; }
       const now = todoRows().map(r => r.dataset.id);
       // The open row that came after it, else the one before, wherever they
       // are now. Never a done row while an open one is left: Space Space
@@ -2676,21 +2703,19 @@
       switch (k) {
         case 'Escape': selId = null; applySel(false); return true;
         case ' ': case 'x':
-          if (item.suggested) return false;
           if (done) setDone(id, false); else keepPlace(() => setDone(id, true));
           return true;
         case 'Enter': case 'e':
-          if (k === 'Enter' && item.suggested) { keepPlace(() => keepSuggestion(id)); return true; }
           if (row) startEdit(id, row.querySelector('.todo-text'));
           return true;
-        case 'Delete': case 'Backspace': dropItem(id); return true;
+        case 'Delete': case 'Backspace': keepPlace(() => dropItem(id)); return true;
         case 'p': toggleCtx(id); return true;
         case 'd':
           if (done || !row) return false;
           pickDue(id, row.querySelector('.badge.due') || row.querySelector('.todo-text'));
           return true;
         case 't': case 'w': case 'l': {
-          if (done || item.suggested) return false;
+          if (done) return false;
           const to = { t: 'today', w: 'waiting', l: 'later' }[k];
           keepPlace(() => moveTo(id, item.list === to ? 'next' : to));
           return true;
@@ -2710,18 +2735,32 @@
     // --- To-do: changes ---
     function changed() { scheduleSave(); renderTodo(); }
 
+    // What happens to the collector's items goes in decisions.log, which the
+    // collector reads before each run to learn what is worth suggesting.
+    function logDecision(item, d, extra) {
+      if (!item || !FN.fromCollector(item)) return;
+      const x = Object.assign({}, extra);
+      if (item.suggested) x.suggested = true;
+      try { window.api.logDecisions([FN.decisionEntry(item, d, Date.now(), x)]); } catch (e) { /* the log is best effort */ }
+    }
+
+    // false when refused, so keepPlace leaves the selection where it was.
     function moveTo(id, list) {
       const item = state.items[id];
-      if (!item) return;
+      if (!item) return false;
       if (list === 'today' && item.list !== 'today' && todayFull()) {
         toast('Today is full (' + todayCap() + '). Finish or move one out first.');
-        return;
+        return false;
       }
       FN.moveItem(item, list, Date.now());
       changed();
+      return true;
     }
 
-    function setDone(id, done) {
+    function setDone(id, done, extra) {
+      const item = state.items[id];
+      if (!item) return;
+      if (done && !FN.isDone(item)) logDecision(item, 'done', extra);
       if (done) FN.completeItem(state, id, Date.now());
       else FN.uncompleteItem(state, id, Date.now());
       changed();
@@ -2737,6 +2776,7 @@
       const item = state.items[id];
       if (!item) return;
       const copy = FN.clone(item);
+      if (!FN.isDone(item)) logDecision(item, 'drop');
       delete state.items[id];
       changed();
       toast('Dropped “' + trunc(copy.text, 40) + '”', () => {
@@ -2746,18 +2786,30 @@
       });
     }
 
-    function keepSuggestion(id) {
+    // toToday: kept straight onto Today (the pick checks there is room).
+    function keepSuggestion(id, toToday) {
       const item = state.items[id];
-      if (!item) return;
+      if (!item || !item.suggested) return;
+      logDecision(item, 'keep', toToday ? { to: 'today' } : undefined);
       delete item.suggested;
       item.touchedAt = Date.now();
+      if (toToday) FN.moveItem(item, 'today', Date.now());
       changed();
     }
 
     function dismissHint(id) {
       const item = state.items[id];
       if (!item || !item.closeHint) return;
+      logDecision(item, 'notyet', { hint: true });
       delete item.closeHint;
+      changed();
+    }
+
+    function clearReplied(id) {
+      const item = state.items[id];
+      if (!item || !item.replied) return;
+      delete item.replied;
+      item.touchedAt = Date.now();
       changed();
     }
 
@@ -2800,9 +2852,10 @@
       const item = state.items[id];
       if (!item || editingId) return;
       editingId = id;
+      const orig = item.text;
       const input = document.createElement('input');
       input.className = 'todo-edit';
-      input.value = item.text;
+      input.value = orig;
       textEl.replaceWith(input);
       input.focus();
       input.setSelectionRange(input.value.length, input.value.length);
@@ -2811,7 +2864,9 @@
         if (finished) return;
         finished = true;
         editingId = null;
-        if (save) applyEdit(id, input.value);
+        // Unchanged text is not re-read: that would re-parse words like
+        // "fri" in it and touch an item nobody edited.
+        if (save && input.value !== orig) applyEdit(id, input.value);
         renderTodo();
       };
       input.addEventListener('keydown', (e) => {
@@ -2819,7 +2874,8 @@
         if (e.key === 'Enter') { e.preventDefault(); finish(true); }
         else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
       });
-      input.addEventListener('blur', () => finish(true));
+      // Switching to another window is not finishing: the edit stays open.
+      input.addEventListener('blur', () => { if (document.hasFocus()) finish(true); });
     }
 
     // One hidden date input, opened next to the badge that was clicked.
@@ -2850,20 +2906,28 @@
     }
 
     // --- To-do: toast with undo ---
+    // An undo lives 10 seconds on its own timer: a plain message shown in the
+    // meantime ("Claude: 2 suggested") must not take the Undo away.
     let toastTimer = null;
+    let undoTimer = null;
     let undoFn = null;
     function toast(msg, undo) {
       const el = document.getElementById('toast');
-      el.innerHTML = '<span>' + escapeHtml(msg) + '</span>' + (undo ? '<button id="toast-undo">Undo</button>' : '');
+      if (undo) {
+        undoFn = undo;
+        clearTimeout(undoTimer);
+        undoTimer = setTimeout(() => { undoFn = null; }, 10000);
+      }
+      el.innerHTML = '<span>' + escapeHtml(msg) + '</span>' + (undoFn ? '<button id="toast-undo">Undo</button>' : '');
       el.classList.remove('hidden');
-      undoFn = undo || null;
       clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => { el.classList.add('hidden'); undoFn = null; }, 5000);
+      toastTimer = setTimeout(() => el.classList.add('hidden'), undoFn ? 10000 : 5000);
     }
     function runUndo() {
       if (!undoFn) return false;
       const f = undoFn;
       undoFn = null;
+      clearTimeout(undoTimer);
       document.getElementById('toast').classList.add('hidden');
       f();
       return true;
@@ -2892,10 +2956,11 @@
         case 'due': pickDue(id, el); break;
         case 'move': moveTo(id, el.dataset.to); break;
         case 'drop': dropItem(id); break;
-        case 'keep': keepSuggestion(id); break;
-        case 'hint-done': setDone(id, true); break;
+        case 'hint-done': setDone(id, true, { hint: true }); break;
         case 'hint-no': dismissHint(id); break;
-        case 'open-pick': openPick(true); break;
+        case 'replied-ok': clearReplied(id); break;
+        case 'open-pick': openPick('more'); break;
+        case 'review': openPick('review'); break;
         case 'note': openNotes.has(id) ? openNotes.delete(id) : openNotes.add(id); renderTodo(); break;
         case 'toggle-later': laterOpen = !laterOpen; renderTodo(); break;
         case 'triage-close': triageDismissed = FN.dateStr(new Date()); renderTodo(); break;
@@ -2983,7 +3048,7 @@
 
     // --- To-do: keyboard ---
     document.addEventListener('keydown', (e) => {
-      if (settingsOpen()) return;
+      if (settingsOpen() || onboardingShown()) return;
       if (keysOpen()) {
         if (e.key === 'Escape' || e.key === '?') { e.preventDefault(); closeKeys(); }
         return;
@@ -3003,9 +3068,6 @@
       if (k === '?') { e.preventDefault(); openKeys(); return; }
       if (k === '/' || k === 'n') { e.preventDefault(); captureInput.focus(); return; }
       if (k === 'ArrowDown' || k === 'ArrowUp') { e.preventDefault(); moveSel(k === 'ArrowDown' ? 1 : -1); return; }
-      // A suggestion focused with Tab counts as selected.
-      const focused = t.closest && t.closest('.todo-item.suggested');
-      if (focused) { selId = focused.dataset.id; applySel(false); }
       const item = selId && state.items[selId];
       if (item) { if (selKey(k, item)) e.preventDefault(); return; }
       const tri = document.querySelector('.card.triage');
@@ -3014,9 +3076,15 @@
     });
 
     // --- Morning pick ---
-    // First focus of a new day: unfinished Today items one at a time
-    // (carry / back to Next / drop), then choose up to the cap from Next.
-    let pick = null; // { step: 'carry' | 'pick', carry: [ids], ci, rows: [ids], chosen: Set }
+    // First focus of a new day, in three steps, each skipped when it has
+    // nothing to show: unfinished Today items one at a time (carry / back to
+    // Next / drop), Claude's suggestions one at a time (keep / Today / drop /
+    // decide later), then choose up to the cap from Next. "Pick from Next"
+    // runs the last step alone, "Review" the middle one.
+    let pick = null;
+
+    const PICK_STEPS = { morning: ['carry', 'suggest', 'pick'], more: ['pick'], review: ['suggest'] };
+    const KIND_LABELS = { promise: 'You promised', ask: 'Asked of you', waiting: 'Waiting on them', deadline: 'Deadline', blocked: 'Blocked on you' };
 
     function pickSlots() { return todayCap() - FN.openCount(state, 'today'); }
 
@@ -3025,29 +3093,67 @@
         .filter(i => !FN.isDone(i)).map(i => i.id);
     }
 
-    function openPick(skipCarry) {
+    function isTyping(el) {
+      return !!el && ((el.tagName === 'INPUT' && el.type !== 'checkbox') || el.tagName === 'TEXTAREA' ||
+        el.tagName === 'SELECT' || el.isContentEditable);
+    }
+
+    function openPick(mode) {
       if (pick) return;
-      pick = { manual: !!skipCarry, step: 'carry', carry: skipCarry ? [] : FN.carryOvers(state).filter(i => i.carriedDays > 0).map(i => i.id), ci: 0, rows: [], chosen: new Set() };
+      pick = {
+        mode, steps: PICK_STEPS[mode], si: -1, step: null,
+        carry: mode === 'morning' ? FN.carryOvers(state).filter(i => i.carriedDays > 0).map(i => i.id) : [],
+        ci: 0,
+        sugg: mode === 'more' ? [] : FN.pendingSuggestions(state).map(i => i.id),
+        gi: 0,
+        rows: [], chosen: new Set(),
+        slid: mode === 'morning' ? FN.slidToReport(state, new Date()) : 0,
+        openedAt: Date.now(), shown: false, showing: null
+      };
       if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
       advancePick();
     }
 
-    function advancePick() {
+    // The live item at the current place in a one-at-a-time step. Anything
+    // that went away since the pick opened (synced, ticked, expired) is passed over.
+    function pickCurrent() {
       if (pick.step === 'carry') {
-        while (pick.ci < pick.carry.length && !state.items[pick.carry[pick.ci]]) pick.ci++;
-        if (pick.ci < pick.carry.length) return renderPick();
-        pick.step = 'pick';
-        pick.rows = pickCandidates();
+        for (; pick.ci < pick.carry.length; pick.ci++) {
+          const it = state.items[pick.carry[pick.ci]];
+          if (it && it.list === 'today' && !FN.isDone(it)) return it;
+        }
+      } else if (pick.step === 'suggest') {
+        for (; pick.gi < pick.sugg.length; pick.gi++) {
+          const it = state.items[pick.sugg[pick.gi]];
+          if (it && it.suggested && !FN.isDone(it)) return it;
+        }
       }
-      if (!pick.rows.length || pickSlots() <= 0) {
-        const nothing = !pick.rows.length && !pick.carry.length;
-        const manual = pick.manual;
-        finishPick(false);
-        // Only when asked: the morning pick on an empty list stays quiet.
-        if (manual && nothing && FN.openCount(state, 'today') === 0) toast('Nothing in Next to pick from.');
-        return;
+      return null;
+    }
+
+    function advancePick() {
+      for (;;) {
+        if (pick.step === 'carry' || pick.step === 'suggest') { if (pickCurrent()) return renderPick(); }
+        else if (pick.step === 'pick' && pick.rows.length && pickSlots() > 0) return renderPick();
+        if (++pick.si >= pick.steps.length) return endPick();
+        pick.step = pick.steps[pick.si];
+        if (pick.step === 'pick') pick.rows = pickCandidates();
       }
-      renderPick();
+    }
+
+    // Ran out of steps without the last one needing a button.
+    function endPick() {
+      const p = pick;
+      finishPick(false);
+      if (p.shown) return;
+      // Only when asked: the morning pick on an empty list stays quiet.
+      if (p.mode === 'more' && !p.rows.length && FN.openCount(state, 'today') === 0) toast('Nothing in Next to pick from.');
+      else if (p.mode === 'review') toast('No suggestions waiting.');
+      else if (p.slid) toast(slidText(p.slid));
+    }
+
+    function slidText(n) {
+      return n + (n === 1 ? ' item' : ' items') + ' untouched for ' + FN.SLIDE_DAYS + ' days slid to Later.';
     }
 
     function renderPick() {
@@ -3055,11 +3161,15 @@
       const card = document.getElementById('pick-card');
       const now = Date.now();
       const today = FN.dateStr(now);
+      const slid = pick.slid ? '<div class="pick-slid">' + slidText(pick.slid) + '</div>' : '';
       let html;
+      pick.shown = true;
+      pick.showing = null;
       if (pick.step === 'carry') {
-        const item = state.items[pick.carry[pick.ci]];
+        const item = pickCurrent();
+        pick.showing = item.id;
         html = '<div class="pick-title">Still on Today (' + (pick.ci + 1) + ' of ' + pick.carry.length + ')</div>' +
-          '<div class="pick-sub">Carry it into today, send it back to Next, or drop it.</div>' +
+          '<div class="pick-sub">Carry it into today, send it back to Next, or drop it.</div>' + slid +
           '<div class="card-text">' + escapeHtml(item.text) + '</div>' +
           '<div class="todo-meta">' + metaHtml(item, today, now) + '</div>' +
           '<div class="card-btns">' +
@@ -3068,11 +3178,30 @@
             '<button class="card-btn danger" data-pick="drop">Drop<kbd>D</kbd></button>' +
           '</div>' +
           '<div class="pick-foot"><button class="link-btn" data-pick="skip">Not now</button></div>';
+      } else if (pick.step === 'suggest') {
+        const item = pickCurrent();
+        pick.showing = item.id;
+        const noToday = todayFull() || item.list !== 'next';
+        html = '<div class="pick-title">New from Claude (' + (pick.gi + 1) + ' of ' + pick.sugg.length + ')</div>' +
+          '<div class="pick-sub">Keep it, put it straight on Today, or drop it. Undecided ones go after ' +
+            FN.SUGGESTION_DAYS + ' days.</div>' + slid +
+          '<div class="card-text">' + escapeHtml(item.text) + '</div>' +
+          '<div class="todo-meta">' + (KIND_LABELS[item.kind] ? '<span class="badge kind">' + KIND_LABELS[item.kind] + '</span>' : '') +
+            metaHtml(item, today, now) + '</div>' +
+          (item.note ? '<div class="pick-note">' + escapeHtml(item.note) + '</div>' : '') +
+          '<div class="card-btns">' +
+            '<button class="card-btn primary" data-pick="keep">Keep<kbd>K</kbd></button>' +
+            '<button class="card-btn" data-pick="today"' + (noToday ? ' disabled title="' +
+              (item.list !== 'next' ? 'Kept in ' + LIST_NAMES[item.list] : 'Today is full') + '"' : '') + '>Today<kbd>T</kbd></button>' +
+            '<button class="card-btn danger" data-pick="drop">Drop<kbd>D</kbd></button>' +
+          '</div>' +
+          '<div class="pick-foot"><button class="link-btn" data-pick="later">Decide later (S)</button> · ' +
+            '<button class="link-btn" data-pick="skip">Close (Esc)</button></div>';
       } else {
         const slots = pickSlots();
         const left = slots - pick.chosen.size;
         html = '<div class="pick-title">Pick for today (' + pick.chosen.size + ' of ' + slots + ')</div>' +
-          '<div class="pick-sub">' + FN.openCount(state, 'today') + '/' + todayCap() + ' already on Today. Due items first. Keys 1–9 pick.</div>' +
+          '<div class="pick-sub">' + FN.openCount(state, 'today') + '/' + todayCap() + ' already on Today. Due items first. Keys 1–9 pick.</div>' + slid +
           '<div class="pick-list">' + pick.rows.map((id, n) => {
             const item = state.items[id];
             if (!item) return '';
@@ -3084,20 +3213,42 @@
             '</div>';
           }).join('') + '</div>' +
           '<div class="card-btns">' +
-            '<button class="card-btn primary" data-pick="start">' + (pick.manual ? 'Add to Today' : 'Start day') + '<kbd>Enter</kbd></button>' +
+            '<button class="card-btn primary" data-pick="start">' + (pick.mode === 'more' ? 'Add to Today' : 'Start day') + '<kbd>Enter</kbd></button>' +
             '<button class="card-btn" data-pick="skip">Not now<kbd>Esc</kbd></button>' +
           '</div>';
       }
       card.innerHTML = html;
       overlay.classList.remove('hidden');
+      fitCompact();
+    }
+
+    // A key or click acts on the item on screen. If that one has gone since
+    // it was drawn, the card is redrawn and the key does nothing.
+    function pickTarget() {
+      const item = pickCurrent();
+      if (!item || item.id !== pick.showing) { advancePick(); return null; }
+      return item;
     }
 
     function pickCarry(choice) {
-      const id = pick.carry[pick.ci];
+      const item = pickTarget();
+      if (!item) return;
       pick.ci++;
-      if (choice === 'next') moveTo(id, 'next');
-      else if (choice === 'drop') dropItem(id);
-      else if (state.items[id]) { state.items[id].touchedAt = Date.now(); changed(); }
+      if (choice === 'next') moveTo(item.id, 'next');
+      else if (choice === 'drop') dropItem(item.id);
+      else { item.touchedAt = Date.now(); changed(); }
+      advancePick();
+    }
+
+    function pickSuggest(choice) {
+      const item = pickTarget();
+      if (!item) return;
+      if (choice === 'today' && (todayFull() || item.list !== 'next')) return;
+      pick.gi++;
+      if (choice === 'keep') keepSuggestion(item.id);
+      else if (choice === 'today') keepSuggestion(item.id, true);
+      else if (choice === 'drop') dropItem(item.id);
+      // 'later': it stays a suggestion, and expires if never decided
       advancePick();
     }
 
@@ -3112,28 +3263,40 @@
     function finishPick(apply) {
       if (apply) {
         for (const id of pick.rows) {
-          if (pick.chosen.has(id) && state.items[id] && !todayFull()) FN.moveItem(state.items[id], 'today', Date.now());
+          const it = state.items[id];
+          // Only what is still open in Next: the list can change under the pick.
+          if (pick.chosen.has(id) && it && !FN.isDone(it) && it.list === 'next' && !it.suggested && !todayFull()) {
+            FN.moveItem(it, 'today', Date.now());
+          }
         }
       }
-      state.meta.lastPick = FN.dateStr(new Date());
+      if (pick.mode !== 'review') state.meta.lastPick = FN.dateStr(new Date());
+      if (pick.slid) state.meta.slid = 0;
       pick = null;
       document.getElementById('pick-overlay').classList.add('hidden');
       changed();
     }
 
+    // Keys reach the pick only when meant for it: never with a modifier held,
+    // never into a field, never held down, and not in the first half second,
+    // when a key already on its way belongs to whatever had focus before.
     function pickKey(e) {
-      if (!document.getElementById('onboarding').classList.contains('hidden')) return;
+      if (onboardingShown()) return;
+      if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) return;
+      if (e.repeat || Date.now() - pick.openedAt < 500) { e.preventDefault(); return; }
       const k = e.key.toLowerCase();
-      if (pick.step === 'carry') {
-        if (k === 'c') pickCarry('carry');
-        else if (k === 'n') pickCarry('next');
-        else if (k === 'd') pickCarry('drop');
-        else if (k === 'escape') finishPick(false);
-        else return;
+      if (k === 'escape') finishPick(false);
+      else if (pick.step === 'carry') {
+        const c = { c: 'carry', n: 'next', d: 'drop' }[k];
+        if (!c) return;
+        pickCarry(c);
+      } else if (pick.step === 'suggest') {
+        const c = { k: 'keep', enter: 'keep', t: 'today', d: 'drop', s: 'later' }[k];
+        if (!c) return;
+        pickSuggest(c);
       } else {
         if (/^[1-9]$/.test(k)) togglePickRow(Number(k) - 1);
         else if (k === 'enter') finishPick(true);
-        else if (k === 'escape') finishPick(false);
         else return;
       }
       e.preventDefault();
@@ -3144,20 +3307,34 @@
       const row = e.target.closest('[data-pick-row]');
       if (row) { togglePickRow(Number(row.dataset.pickRow)); return; }
       const b = e.target.closest('[data-pick]');
-      if (!b) return;
+      if (!b || b.disabled) return;
       const a = b.dataset.pick;
-      if (a === 'carry' || a === 'next' || a === 'drop') pickCarry(a);
+      if (a === 'skip') finishPick(false);
       else if (a === 'start') finishPick(true);
-      else if (a === 'skip') finishPick(false);
+      else if (pick.step === 'carry') pickCarry(a);
+      else if (pick.step === 'suggest') pickSuggest(a);
     });
 
     // The day boundary: carry-over counting runs once a day, and the pick
-    // opens on the first focus of the day. No timers fire anything at you.
+    // opens on the first focus of the day, never while something is being
+    // typed. Expiry and the slide to Later run on the same tick, outside a pick.
+    // No timers fire anything at you.
     function checkDay(allowPick) {
       if (!loaded) return;
       const now = new Date();
-      if (FN.startDay(state, now)) changed();
-      if (allowPick && !pick && state.preferences.name && FN.needsPick(state, now)) openPick(false);
+      let dirty = FN.startDay(state, now);
+      if (!pick) {
+        const gone = FN.expireSuggestions(state, now);
+        if (gone.length) {
+          dirty = true;
+          try { window.api.logDecisions(gone.map(i => FN.decisionEntry(i, 'expired', now.getTime(), { suggested: true }))); }
+          catch (e) { /* the log is best effort */ }
+        }
+        if (FN.slideToLater(state, now).length) dirty = true;
+      }
+      if (dirty) changed();
+      if (allowPick && !pick && state.preferences.name && !onboardingShown() && !editingId &&
+        !isTyping(document.activeElement) && FN.needsPick(state, now)) openPick('morning');
     }
     window.addEventListener('focus', () => checkDay(true));
     document.addEventListener('visibilitychange', () => { if (!document.hidden) checkDay(document.hasFocus()); });
@@ -3168,9 +3345,20 @@
     function fitCompact(force) {
       if (!document.body.classList.contains('compact')) return;
       requestAnimationFrame(() => {
-        const sec = document.getElementById('sec-today');
-        if (!sec) return;
-        const h = document.querySelector('.titlebar').offsetHeight + sec.offsetHeight + 12;
+        let body;
+        if (pick) {
+          // The pick covers the window, so the window fits the pick card,
+          // measured at its full height (main caps it at the normal size).
+          const card = document.getElementById('pick-card');
+          card.style.maxHeight = 'none';
+          body = card.offsetHeight + 28;
+          card.style.maxHeight = '';
+        } else {
+          const sec = document.getElementById('sec-today');
+          if (!sec) return;
+          body = sec.offsetHeight + 12;
+        }
+        const h = document.querySelector('.titlebar').offsetHeight + body;
         if (force || h !== compactHeight) {
           compactHeight = h;
           window.api.setCompact(true, h);
@@ -3489,9 +3677,9 @@
           const checked = state.habitLog[habit.id + ':' + dateStr];
           const tdClass = dateStr === today ? ' class="today"' : '';
           if (scheduled) {
-            html += '<td' + tdClass + '><div class="habit-cell' + (checked ? ' checked' : '') + '"' + (movable ? ' draggable="true" data-day="' + i + '"' : '') + ' data-habit="' + habit.id + '" data-date="' + dateStr + '">' + (checked ? '\u2713' : '') + '</div></td>';
+            html += '<td' + tdClass + '><div class="habit-cell' + (checked ? ' checked' : '') + '"' + (movable ? ' draggable="true" data-day="' + i + '"' : '') + ' data-habit="' + escapeHtml(habit.id) + '" data-date="' + dateStr + '">' + (checked ? '\u2713' : '') + '</div></td>';
           } else if (movable) {
-            html += '<td' + tdClass + '><div class="habit-drop-target" data-habit="' + habit.id + '" data-date="' + dateStr + '" data-day="' + i + '"></div></td>';
+            html += '<td' + tdClass + '><div class="habit-drop-target" data-habit="' + escapeHtml(habit.id) + '" data-date="' + dateStr + '" data-day="' + i + '"></div></td>';
           } else {
             html += '<td' + tdClass + '></td>';
           }
@@ -3836,17 +4024,54 @@
       }, { passive: false });
     });
 
+    // The caret as a count of characters into the editor's text, so it can be
+    // put back after the HTML is replaced.
+    function caretOffset(el) {
+      const sel = window.getSelection();
+      if (!sel.rangeCount || !el.contains(sel.anchorNode)) return -1;
+      const r = document.createRange();
+      r.selectNodeContents(el);
+      r.setEnd(sel.anchorNode, sel.anchorOffset);
+      return r.toString().length;
+    }
+    function setCaretOffset(el, off) {
+      const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      let node, left = off, last = null;
+      while ((node = walk.nextNode())) {
+        last = node;
+        if (left <= node.length) break;
+        left -= node.length;
+      }
+      const r = document.createRange();
+      if (node) r.setStart(node, left);
+      else if (last) r.setStart(last, last.length);
+      else r.setStart(el, 0);
+      r.collapse(true);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(r);
+    }
+
     // --- Remote sync: per-record patches from main ---
     // Before load() finishes, the state it loads already holds the patch.
     window.api.onRemotePatch((patch, seq, before) => {
       if (!loaded) return;
       remoteSeq = seq;
+      const cat = activeNotesCategory;
+      const prev = state.notes[cat];
       // A record edited here since main last saw it keeps the edit (see core).
       FN.applyPatchIfUnchanged(state, patch, before);
       const editor = document.getElementById('notes-editor');
-      // Leave the editor alone while it is being typed in.
-      if (('notes/' + activeNotesCategory) in patch && document.activeElement !== editor) {
-        editor.innerHTML = state.notes[activeNotesCategory] || '';
+      if (('notes/' + cat) in patch) {
+        if (document.activeElement !== editor) editor.innerHTML = sanitizeNotes(state.notes[cat]);
+        // Focused but nothing typed since the last save: take the other
+        // device's text and keep the caret where it was. Typed text wins.
+        else if (state.notes[cat] !== prev && editor.innerHTML === prev) {
+          const off = caretOffset(editor);
+          editor.innerHTML = sanitizeNotes(state.notes[cat]);
+          state.notes[cat] = editor.innerHTML;
+          if (off >= 0) setCaretOffset(editor, off);
+        }
       }
       renderTodo();
       if (document.getElementById('panel-habits').classList.contains('active')) renderActiveHabitView();
@@ -3860,6 +4085,7 @@
       if (n.direct) parts.push(n.direct + ' added');
       if (sugg) parts.push(sugg + ' suggested');
       if (n.hinted) parts.push(n.hinted + (n.hinted === 1 ? ' looks done' : ' look done'));
+      if (n.replied) parts.push(n.replied + ' replied');
       if (parts.length) toast('Claude: ' + parts.join(', ') + '.');
     });
 
@@ -3914,6 +4140,7 @@
         : info.hotkey !== info.wantedHotkey ? info.wantedHotkey + ' is taken by another app, so ' + info.hotkey + ' is the live one.'
         : '';
       document.getElementById('login-check').checked = !!state.preferences.launchAtLogin;
+      document.getElementById('ontop-check').checked = state.preferences.onTop !== false;
       document.getElementById('login-note').textContent = info.packaged ? '' : 'Only takes effect in the installed app.';
     }
 
@@ -3977,6 +4204,11 @@
       state.preferences.launchAtLogin = e.target.checked;
       scheduleSave();
     });
+    // main applies it when the save lands
+    document.getElementById('ontop-check').addEventListener('change', (e) => {
+      state.preferences.onTop = e.target.checked;
+      scheduleSave();
+    });
 
     // Hotkey recorder. The live hotkey is released while recording, so pressing
     // it here records it instead of opening the popup.
@@ -4023,6 +4255,8 @@
 
     document.addEventListener('keydown', (e) => {
       if (CAPTURE) return;
+      // Not over the morning pick or the first-run screen: both own the keys.
+      if (!settingsOpen() && (pick || onboardingShown())) return;
       if ((e.ctrlKey || e.metaKey) && e.key === ',') { e.preventDefault(); settingsOpen() ? closeSettings() : openSettings(); return; }
       if (settingsOpen() && e.key === 'Escape') { e.preventDefault(); closeSettings(); }
     });

@@ -441,6 +441,125 @@ test('inbox: seen keys older than the window are forgotten', () => {
   assert.deepEqual(Object.keys(seen), ['recent']);
 });
 
+// ---------- intake: kinds, replies, expiry, slide, decisions ----------
+
+test('inbox: a suggestion keeps a known kind, drops an unknown one, and remembers it was suggested', () => {
+  const s = C.emptyState();
+  const r = C.ingestInbox(s, [
+    { text: 'Send the deck to Ines', kind: 'promise' },
+    { text: 'Chase the signed NDA', kind: 'waiting' },
+    { text: 'Read the newsletter', kind: 'fyi' },
+    { text: 'Book the train', kind: 'promise', direct: true }
+  ], T, {});
+  const items = r.added.map(id => s.items[id]);
+  assert.deepEqual(items.map(i => i.kind), ['promise', 'waiting', undefined, 'promise']);
+  assert.equal(items[1].list, 'waiting', 'kind waiting with no list lands in Waiting');
+  assert.deepEqual(items.map(i => i.origin), ['suggested', 'suggested', 'suggested', undefined]);
+  // Keeping (dropping the suggested flag) leaves the origin, so a later Done is still logged.
+  delete items[0].suggested;
+  assert.ok(C.fromCollector(items[0]));
+  assert.ok(!C.fromCollector(items[3]), 'a direct add is not the collector\'s');
+});
+
+test('inbox: replied brings a Waiting item back to Next, marked, once', () => {
+  const s = stateWith([
+    C.makeItem({ id: 'w', text: 'Term sheet from Jens', list: 'waiting' }, T - 5 * DAY),
+    C.makeItem({ id: 'n', text: 'Draft memo', list: 'next' }, T)
+  ]);
+  const seen = {};
+  const r = C.ingestInbox(s, { replied: [
+    { replied: 'w', why: 'Jens replied on 30 Sep', source: { url: 'https://mail.example.com/t/5', label: 'Re: terms' } },
+    { replied: 'n', why: 'x' },
+    { replied: 'zzz', why: 'x' }
+  ] }, T, seen);
+  assert.deepEqual(r.replied, ['w']);
+  assert.equal(s.items.w.list, 'next');
+  assert.equal(s.items.w.replied.why, 'Jens replied on 30 Sep');
+  assert.equal(s.items.w.replied.source.label, 'Re: terms');
+  assert.deepEqual(r.skipped.map(x => x.reason), ['not waiting', 'no such item']);
+  // Back to Waiting by hand, then the same reply again: not re-applied.
+  C.moveItem(s.items.w, 'waiting', T + 1);
+  assert.equal(s.items.w.replied, undefined, 'moving clears the mark');
+  const again = C.ingestInbox(s, [{ replied: 'w', why: 'Jens replied on 30 Sep', source: { url: 'https://mail.example.com/t/5' } }], T, seen);
+  assert.deepEqual([again.replied.length, s.items.w.list], [0, 'waiting']);
+  const noWhy = C.ingestInbox(s, [{ replied: 'w', why: ' ' }], T, seen);
+  assert.deepEqual(noWhy.skipped.map(x => x.reason), ['a reply needs a why']);
+});
+
+test('inbox: finishing a replied item clears the mark', () => {
+  const s = stateWith([C.makeItem({ id: 'w', text: 'Invented chase', list: 'waiting' }, T)]);
+  C.ingestInbox(s, [{ replied: 'w', why: 'They answered' }], T, {});
+  assert.ok(s.items.w.replied);
+  C.completeItem(s, 'w', T);
+  assert.equal(s.items.w.replied, undefined);
+});
+
+test('suggestions expire after 3 days; kept ones and fresh ones stay', () => {
+  const s = stateWith([
+    C.makeItem({ id: 'old', text: 'Old suggestion', suggested: true }, T - 3 * DAY),
+    C.makeItem({ id: 'young', text: 'Young suggestion', suggested: true }, T - 3 * DAY + 60000),
+    C.makeItem({ id: 'kept', text: 'Kept long ago' }, T - 10 * DAY)
+  ]);
+  const gone = C.expireSuggestions(s, T);
+  assert.deepEqual(gone.map(i => i.id), ['old']);
+  assert.equal(gone[0].text, 'Old suggestion', 'the copy carries what the log needs');
+  assert.deepEqual(Object.keys(s.items).sort(), ['kept', 'young']);
+  assert.deepEqual(C.expireSuggestions(s, T), [], 'idempotent');
+});
+
+test('pendingSuggestions: open suggestions only, oldest first', () => {
+  const s = stateWith([
+    C.makeItem({ id: 'b', text: 'b', suggested: true }, T),
+    C.makeItem({ id: 'a', text: 'a', suggested: true }, T - DAY),
+    C.makeItem({ id: 'k', text: 'k' }, T - 2 * DAY)
+  ]);
+  assert.deepEqual(C.pendingSuggestions(s).map(i => i.id), ['a', 'b']);
+});
+
+test('slide: Next items untouched 30 days go to Later and are counted', () => {
+  const s = stateWith([
+    C.makeItem({ id: 'old', text: 'Old', list: 'next' }, T - 30 * DAY),
+    C.makeItem({ id: 'young', text: 'Young', list: 'next' }, T - 29 * DAY),
+    C.makeItem({ id: 'wait', text: 'Waiting long', list: 'waiting' }, T - 60 * DAY),
+    C.makeItem({ id: 'sug', text: 'Suggestion', suggested: true }, T - 60 * DAY),
+    C.makeItem({ id: 'done', text: 'Done', list: 'next' }, T - 60 * DAY)
+  ]);
+  C.completeItem(s, 'done', T - 40 * DAY);
+  assert.deepEqual(C.slideToLater(s, T), ['old']);
+  assert.equal(s.items.old.list, 'later');
+  assert.equal(s.items.young.list, 'next');
+  assert.equal(s.meta.slid, 1);
+  assert.deepEqual(C.slideToLater(s, T), [], 'a slid item is touched, so it does not count twice');
+  assert.equal(s.meta.slid, 1);
+});
+
+test('slid count is reported in the first pick of a week only', () => {
+  const s = C.emptyState();
+  s.meta.slid = 4;
+  // NOW is Thursday 1 Oct 2026; that week's Monday is 28 Sep.
+  assert.equal(C.weekStart('2026-10-01'), '2026-09-28');
+  assert.equal(C.weekStart('2026-09-28'), '2026-09-28');
+  assert.equal(C.weekStart('2026-10-04'), '2026-09-28', 'Sunday belongs to the week before');
+  s.meta.lastPick = '2026-09-25';                  // last week
+  assert.equal(C.slidToReport(s, NOW), 4);
+  s.meta.lastPick = '2026-09-28';                  // this week already
+  assert.equal(C.slidToReport(s, NOW), 0);
+  delete s.meta.lastPick;
+  assert.equal(C.slidToReport(s, NOW), 4);
+  s.meta.slid = 0;
+  assert.equal(C.slidToReport(s, NOW), 0);
+});
+
+test('decisionEntry carries what the collector learns from', () => {
+  const it = C.makeItem({ id: 'x', text: 'Send cap table', kind: 'promise', who: 'Rui', suggested: true,
+    source: { url: 'https://mail.example.com/t/1', label: 'Re: cap' } }, T);
+  const e = C.decisionEntry(it, 'drop', T);
+  assert.deepEqual(e, { t: T, date: '2026-10-01', d: 'drop', id: 'x', text: 'Send cap table', list: 'next',
+    kind: 'promise', who: 'Rui', source: { url: 'https://mail.example.com/t/1', label: 'Re: cap' } });
+  const plain = C.decisionEntry(C.makeItem({ id: 'y', text: 'y' }, T), 'done', T, { hint: true });
+  assert.deepEqual(Object.keys(plain).sort(), ['d', 'date', 'hint', 'id', 'list', 't', 'text']);
+});
+
 // ---------- records and stamping ----------
 
 test('records round-trip through applyPatch', () => {
@@ -542,11 +661,27 @@ test('planLoad: a lost clock with an intact data file is suspect', () => {
   assert.deepEqual([p.source, p.suspect], ['read', true]);
 });
 
-test('planLoad: the genuine first run and the first v1 migration are not suspect', () => {
+test('planLoad: the genuine first run and the first v1 launch are not suspect', () => {
   const first = C.planLoad({ data: undefined, exists: false, clock: null, v2Ran: false, backup: noBackup });
   assert.deepEqual([first.source, first.suspect], ['fresh', false]);
-  const mig = C.planLoad({ data: v1Data(), exists: true, clock: null, v2Ran: false, backup: noBackup });
-  assert.deepEqual([mig.source, mig.suspect], ['migrate', false]);
+  const v1 = C.planLoad({ data: v1Data(), exists: true, clock: null, v2Ran: false, backup: noBackup });
+  assert.deepEqual([v1.source, v1.suspect], ['setAside', false]);
+});
+
+test('planLoad: a v1 file is set aside, not migrated; v2 starts empty with its preferences', () => {
+  const data = v1Fixture();
+  const p = C.planLoad({ data, exists: true, clock: null, v2Ran: false, backup: noBackup });
+  assert.equal(p.source, 'setAside');
+  assert.deepEqual(p.raw.items, {});
+  assert.deepEqual(p.raw.completions, {});
+  assert.deepEqual(p.raw.notes, { professional: '', personal: '' });
+  assert.deepEqual([p.raw.habits, p.raw.habitLog], [[], {}]);
+  assert.equal(p.raw.preferences.name, 'Test User', 'preferences come across, so onboarding is not repeated');
+  assert.equal(p.raw.preferences.todayCap, 3);
+  // Negative control: the same file through migrateV1 does carry content, so
+  // the empty result above is the plan's doing, not an empty fixture.
+  assert.ok(Object.keys(C.migrateV1(data, T).items).length > 0);
+  assert.equal(C.freshFromV1([{ text: 'old array format' }]).preferences.todayCap, 3);
 });
 
 test('planLoad: a v1 file reappearing after v2 ran is not migrated again', () => {

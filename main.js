@@ -23,6 +23,7 @@ const BACKUP_KEEP = 14;
 const SYNCED_WRITE_MS = 60 * 60 * 1000;
 const INBOX_DIR = path.join(DATA_DIR, 'inbox');
 const INBOX_SEEN_PATH = path.join(DATA_DIR, 'inbox-seen.json');
+const DECISIONS_PATH = path.join(DATA_DIR, 'decisions.log');
 
 // ---------- files ----------
 
@@ -30,11 +31,17 @@ function readJson(file) {
   try { return JSON.parse(fs.readFileSync(file, 'utf-8')); } catch { return undefined; }
 }
 
-// Write to a temp file, then rename over the target, so a crash mid-write can
-// never leave a half-written data file.
+// Write to a temp file, flush it to disk, then rename over the target, so a
+// crash or power cut mid-write can never leave a half-written data file. The
+// temp name is unique, so two writes of the same file cannot share one.
+let tmpSeq = 0;
 function writeJsonAtomic(file, data) {
-  const tmp = file + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+  const tmp = file + '.' + process.pid + '.' + (++tmpSeq) + '.tmp';
+  const fd = fs.openSync(tmp, 'w');
+  try {
+    fs.writeSync(fd, JSON.stringify(data, null, 2));
+    fs.fsyncSync(fd);
+  } finally { fs.closeSync(fd); }
   try {
     fs.renameSync(tmp, file);
   } catch (err) {
@@ -87,9 +94,11 @@ function loadState() {
   });
   // Unreadable (or a v1 file back after v2 ran): keep the file for inspection.
   if (plan.keepCopy) fs.copyFileSync(DATA_PATH, path.join(DATA_DIR, 'floatnote-data.corrupt-' + Date.now() + '.json'));
-  if (plan.source === 'migrate') {
+  if (plan.source === 'setAside') {
+    // The first v2 launch over v1 data starts fresh (docs/INTAKE.md): the v1
+    // file is kept, untouched, as floatnote-data.v1.json, and nothing is migrated.
     if (!fs.existsSync(V1_BACKUP_PATH)) fs.copyFileSync(DATA_PATH, V1_BACKUP_PATH);
-    state = C.migrateV1(plan.raw, Date.now());
+    state = plan.raw;
     writeJsonAtomic(DATA_PATH, state);
   } else {
     state = plan.raw === undefined ? C.emptyState() : C.normalizeState(plan.raw);
@@ -101,6 +110,12 @@ function loadState() {
   else C.stamp(clock, C.toRecords(state), Date.now());
   writeClock();
   return state;
+}
+
+// On by default; off is for screen shares, where a window that floats over
+// everything else gets in the way.
+function applyOnTop(prefs) {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setAlwaysOnTop(!(prefs && prefs.onTop === false));
 }
 
 let appliedLoginItem;
@@ -128,6 +143,7 @@ function saveState(data, seenSeq) {
   if (changed.length) writeClock();
   if (sync) sync.push(changed);
   applyLoginItem(state.preferences);
+  applyOnTop(state.preferences);
   const wanted = state.preferences.hotkey || C.DEFAULT_PREFS.hotkey;
   if (wanted !== wantedHotkey && !hotkeyPaused) registerHotkey(wanted);
   return changed;
@@ -244,6 +260,7 @@ function processInbox() {
   const added = [];
   const direct = [];
   const hinted = [];
+  const replied = [];
   let retry = false;
   for (const name of names) {
     const file = path.join(INBOX_DIR, name);
@@ -263,17 +280,18 @@ function processInbox() {
     added.push(...r.added);
     direct.push(...r.direct);
     hinted.push(...r.hinted);
+    replied.push(...r.replied);
     try { fs.unlinkSync(file); } catch (err) { console.warn('FloatNote: inbox delete', err.message); }
-    inboxLog({ file: name, added: r.added.length, direct: r.direct.length, hinted: r.hinted.length, skipped: r.skipped });
+    inboxLog({ file: name, added: r.added.length, direct: r.direct.length, hinted: r.hinted.length, replied: r.replied.length, skipped: r.skipped });
   }
   writeJsonAtomic(INBOX_SEEN_PATH, seen);
   if (retry) { clearTimeout(inboxRetry); inboxRetry = setTimeout(processInbox, INBOX_SETTLE_MS + 500); }
-  if (!added.length && !hinted.length) return;
+  if (!added.length && !hinted.length && !replied.length) return;
 
   const records = C.toRecords(state);
   const patch = {};
   const was = {};
-  for (const id of new Set([...added, ...hinted])) {
+  for (const id of new Set([...added, ...hinted, ...replied])) {
     const p = 'items/' + id;
     patch[p] = records[p];
     if (p in before) was[p] = before[p];
@@ -284,7 +302,7 @@ function processInbox() {
   if (changed.length) writeClock();
   if (sync) sync.push(changed);
   sendPatch(patch, was);
-  send('inbox', { added: added.length, direct: direct.length, hinted: hinted.length });
+  send('inbox', { added: added.length, direct: direct.length, hinted: hinted.length, replied: replied.length });
 }
 
 function scheduleInbox() {
@@ -351,7 +369,7 @@ function createWindow() {
     height: b.height || 650,
     minWidth: 300,
     minHeight: 120,
-    alwaysOnTop: true,
+    alwaysOnTop: !(state && state.preferences && state.preferences.onTop === false),
     frame: false,
     transparent: false,
     resizable: true,
@@ -368,6 +386,8 @@ function createWindow() {
   mainWindow.loadFile('index.html');
   lockNavigation(mainWindow);
   mainWindow.once('ready-to-show', () => mainWindow.show());
+  // Windows sign-out or shutdown: save the edit still in the renderer's debounce.
+  mainWindow.on('session-end', () => mainWindow.webContents.send('flush'));
   mainWindow.on('moved', rememberBounds);
   mainWindow.on('resized', rememberBounds);
 
@@ -493,6 +513,7 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(() => {
     loadState();
+    trimDecisions();
     applyLoginItem(state.preferences);
     createWindow();
     createTray();
@@ -537,6 +558,30 @@ ipcMain.handle('load-data', (event) => {
 });
 ipcMain.handle('save-data', (_event, data, seenSeq) => { saveState(data, seenSeq); });
 ipcMain.handle('get-info', () => info());
+
+// The decisions log (docs/INTAKE.md rule 6): one JSON line per keep, drop,
+// done, expired or not-yet on something the collector brought in. It stays in
+// the data dir, never in the repo. Entries older than DECISIONS_KEEP_DAYS are
+// dropped at startup, so the file stays small.
+const DECISIONS_KEEP_DAYS = 120;
+ipcMain.on('log-decisions', (_e, entries) => {
+  if (!Array.isArray(entries)) return;
+  const lines = entries.slice(0, 200)
+    .filter(x => x && typeof x === 'object' && C.DECISIONS.includes(x.d))
+    .map(x => JSON.stringify(x).slice(0, 4000) + '\n');
+  if (!lines.length) return;
+  try { fs.appendFileSync(DECISIONS_PATH, lines.join('')); } catch (err) { console.warn('FloatNote: decisions log', err.message); }
+});
+
+function trimDecisions() {
+  try {
+    if (!fs.existsSync(DECISIONS_PATH)) return;
+    const cutoff = Date.now() - DECISIONS_KEEP_DAYS * C.DAY_MS;
+    const lines = fs.readFileSync(DECISIONS_PATH, 'utf-8').split('\n').filter(Boolean);
+    const keep = lines.filter(l => { try { return JSON.parse(l).t >= cutoff; } catch { return false; } });
+    if (keep.length < lines.length) fs.writeFileSync(DECISIONS_PATH, keep.map(l => l + '\n').join(''));
+  } catch (err) { console.warn('FloatNote: decisions trim', err.message); }
+}
 
 // Firebase keys cannot hold . # $ [ ] /, and the passphrase is part of the key.
 // It is also the only thing between the data and anyone who guesses it.

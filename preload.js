@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('api', {
   // Settings: sync status and the live hotkey. The passphrase only ever goes in.
   getInfo: () => ipcRenderer.invoke('get-info'),
   onInfo: (callback) => ipcRenderer.on('info', (_e, info) => callback(info)),
+  logDecisions: (entries) => ipcRenderer.send('log-decisions', entries),
   setPassphrase: (p) => ipcRenderer.invoke('set-passphrase', p),
   pauseHotkey: (on) => ipcRenderer.send('pause-hotkey', on)
 });

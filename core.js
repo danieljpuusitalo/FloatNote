@@ -16,7 +16,11 @@
   const TRIAGE_THRESHOLD = 5;
   const DONE_RETENTION_DAYS = 30;
   const TOMBSTONE_DAYS = 365;
-  const DEFAULT_PREFS = { todayCap: 3, hotkey: 'Ctrl+Alt+Space', compact: false, launchAtLogin: false };
+  const DEFAULT_PREFS = { todayCap: 3, hotkey: 'Ctrl+Alt+Space', compact: false, launchAtLogin: false, onTop: true };
+  // What earns a suggestion (docs/INTAKE.md). Anything else arrives without a kind.
+  const KINDS = ['promise', 'ask', 'waiting', 'deadline', 'blocked'];
+  const SUGGESTION_DAYS = 3;   // a suggestion not kept within this expires
+  const SLIDE_DAYS = 30;       // a Next item untouched this long slides to Later
 
   // ---------- dates (local calendar days as YYYY-MM-DD) ----------
 
@@ -185,7 +189,8 @@
     if (fields.who) item.who = String(fields.who);
     if (fields.note) item.note = String(fields.note);
     if (fields.source && fields.source.url) item.source = { url: String(fields.source.url), label: String(fields.source.label || fields.source.url) };
-    if (fields.suggested) item.suggested = true;
+    if (KINDS.includes(fields.kind)) item.kind = fields.kind;
+    if (fields.suggested) { item.suggested = true; item.origin = 'suggested'; }
     return item;
   }
 
@@ -195,6 +200,7 @@
       item.list = list;
       item.listAt = t;
       if (list !== 'today') item.carriedDays = 0;
+      delete item.replied;
     }
     item.touchedAt = t;
     return item;
@@ -262,6 +268,7 @@
     item.touchedAt = t;
     delete item.suggested;
     delete item.closeHint;
+    delete item.replied;
     state.completions['c_' + id] = { date: dateStr(t), ctx: item.ctx, text: item.text };
   }
 
@@ -323,12 +330,14 @@
   // ---------- Claude drop-folder suggestions ----------
   //
   // Claude writes JSON files into <data dir>/inbox/; main reads each one with
-  // ingestInbox. Two kinds of entry:
-  //   { text, who?, due?, ctx?, list?: 'next'|'waiting', note?, source?: {url,label}, key? }
-  //     → a suggested item, shown under Suggested until kept or dropped.
+  // ingestInbox. Three kinds of entry:
+  //   { text, kind?, who?, due?, ctx?, list?: 'next'|'waiting', note?, source?: {url,label}, key? }
+  //     → a suggested item, reviewed in the morning pick, kept or dropped.
   //   { done: '<item id>', why, source? }
   //     → a close hint on an open item ("looks done: <why>"), Done or Not yet.
-  // The payload is an array of entries, or { items: [...], done: [...] }.
+  //   { replied: '<item id>', why, source? }
+  //     → a Waiting item got its answer: it comes back to Next, marked replied.
+  // The payload is an array of entries, or { items: [...], done: [...], replied: [...] }.
   //
   // seen (key → { t }) remembers every suggestion ever taken in, so a second
   // sweep of the same mail does not bring back what was already kept or dropped.
@@ -350,14 +359,15 @@
   function inboxEntries(payload) {
     if (Array.isArray(payload)) return payload;
     if (!payload || typeof payload !== 'object') return [];
-    return [].concat(Array.isArray(payload.items) ? payload.items : [], Array.isArray(payload.done) ? payload.done : []);
+    const arr = k => Array.isArray(payload[k]) ? payload[k] : [];
+    return [].concat(arr('items'), arr('done'), arr('replied'));
   }
 
   function ingestInbox(state, payload, now, seen) {
     const t = typeof now === 'number' ? now : (now || new Date()).getTime();
     seen = seen || {};
-    const out = { added: [], direct: [], hinted: [], skipped: [] };
-    const skip = (raw, reason) => out.skipped.push({ text: raw && typeof raw === 'object' ? String(raw.text || raw.done || '').slice(0, 80) : '', reason });
+    const out = { added: [], direct: [], hinted: [], replied: [], skipped: [] };
+    const skip = (raw, reason) => out.skipped.push({ text: raw && typeof raw === 'object' ? String(raw.text || raw.done || raw.replied || '').slice(0, 80) : '', reason });
     const open = Object.values(state.items).filter(i => !isDone(i));
     const existing = new Set(open.map(i => normText(i.text)));
     for (const raw of inboxEntries(payload)) {
@@ -379,6 +389,24 @@
         continue;
       }
 
+      if (typeof raw.replied === 'string') {
+        const item = state.items[raw.replied];
+        const why = typeof raw.why === 'string' ? raw.why.trim().slice(0, 300) : '';
+        if (!item) { skip(raw, 'no such item'); continue; }
+        if (isDone(item)) { skip(raw, 'already done'); continue; }
+        if (item.list !== 'waiting') { skip(raw, 'not waiting'); continue; }
+        if (!why) { skip(raw, 'a reply needs a why'); continue; }
+        const source = cleanSource(raw.source);
+        const key = 'replied:' + raw.replied + '|' + (source ? source.url : normText(why));
+        if (seen[key]) { skip(raw, 'already marked replied'); continue; }
+        seen[key] = { t };
+        moveItem(item, 'next', t);
+        item.replied = { why, at: t };
+        if (source) item.replied.source = source;
+        out.replied.push(item.id);
+        continue;
+      }
+
       if (typeof raw.text !== 'string' || !raw.text.trim()) { skip(raw, 'no text'); continue; }
       const text = raw.text.trim().replace(/\s+/g, ' ').slice(0, 500);
       const key = suggestionKey(raw);
@@ -388,7 +416,8 @@
       // goes straight onto its list. Anything Claude found on its own is a
       // suggestion, and only Next or Waiting. Today is honoured while it has room.
       const direct = raw.direct === true;
-      let list = raw.list === 'waiting' ? 'waiting' : 'next';
+      const kind = KINDS.includes(raw.kind) ? raw.kind : undefined;
+      let list = raw.list === 'waiting' || (raw.list === undefined && kind === 'waiting') ? 'waiting' : 'next';
       if (direct && raw.list === 'later') list = 'later';
       if (direct && raw.list === 'today' && openCount(state, 'today') < todayCapOf(state)) list = 'today';
       const item = makeItem({
@@ -399,6 +428,7 @@
         who: typeof raw.who === 'string' && raw.who.trim() ? raw.who.trim().slice(0, 80) : undefined,
         note: typeof raw.note === 'string' && raw.note.trim() ? raw.note.trim().slice(0, 1000) : undefined,
         source: cleanSource(raw.source),
+        kind,
         suggested: !direct
       }, t);
       state.items[item.id] = item;
@@ -420,6 +450,79 @@
   // The suggestions alone, with nothing remembered between calls.
   function ingestSuggestions(state, payload, now) {
     return ingestInbox(state, payload, now, {}).added;
+  }
+
+  // ---------- nothing rots (docs/INTAKE.md) ----------
+
+  // Open suggestions, in the order they arrived (the collector writes best first).
+  function pendingSuggestions(state) {
+    return Object.values(state.items).filter(i => i.suggested && !isDone(i))
+      .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  }
+
+  // A suggestion not kept within SUGGESTION_DAYS goes. The seen file keeps it
+  // from coming back. Returns copies of what expired, for the decisions log.
+  function expireSuggestions(state, now, days) {
+    const t = typeof now === 'number' ? now : now.getTime();
+    const gone = [];
+    for (const item of pendingSuggestions(state)) {
+      if (t - (item.createdAt || 0) >= (days || SUGGESTION_DAYS) * DAY_MS) {
+        gone.push(clone(item));
+        delete state.items[item.id];
+      }
+    }
+    return gone;
+  }
+
+  // A Next item untouched for SLIDE_DAYS slides to Later. meta.slid counts
+  // them until the first pick of a new week reports the number.
+  function slideToLater(state, now, days) {
+    const t = typeof now === 'number' ? now : now.getTime();
+    const moved = [];
+    for (const item of Object.values(state.items)) {
+      if (item.list !== 'next' || isDone(item) || item.suggested) continue;
+      if (t - (item.touchedAt || item.createdAt || 0) < (days || SLIDE_DAYS) * DAY_MS) continue;
+      moveItem(item, 'later', t);
+      moved.push(item.id);
+    }
+    if (moved.length) state.meta.slid = (Number(state.meta.slid) || 0) + moved.length;
+    return moved;
+  }
+
+  // The Monday on or before a YYYY-MM-DD.
+  function weekStart(s) {
+    const d = parseDateStr(s);
+    return addDays(s, -((d.getDay() + 6) % 7));
+  }
+
+  // How many items slid to Later, to report in this pick: only in the first
+  // pick of a week, so it reads as a weekly line rather than a daily nag.
+  function slidToReport(state, now) {
+    const n = Number(state.meta.slid) || 0;
+    if (!n) return 0;
+    const last = state.meta.lastPick;
+    return !isDateStr(last) || weekStart(last) < weekStart(dateStr(now)) ? n : 0;
+  }
+
+  // ---------- the decisions log ----------
+  //
+  // One line per decision on something the collector brought in, appended to
+  // <data dir>/decisions.log by main, read by the collector so it learns
+  // (docs/INTAKE.md rule 6). d: keep | drop | done | expired | notyet.
+  const DECISIONS = ['keep', 'drop', 'done', 'expired', 'notyet'];
+
+  function fromCollector(item) {
+    return !!item && (item.origin === 'suggested' || !!item.suggested);
+  }
+
+  function decisionEntry(item, d, now, extra) {
+    const t = typeof now === 'number' ? now : now.getTime();
+    const e = { t, date: dateStr(t), d, id: item.id, text: item.text, list: item.list };
+    if (item.kind) e.kind = item.kind;
+    if (item.who) e.who = item.who;
+    if (item.source) e.source = clone(item.source);
+    if (extra) Object.assign(e, extra);
+    return e;
   }
 
   // ---------- state shape and migration ----------
@@ -458,7 +561,9 @@
   //   clock   parseClockFile of the clock file, or null when missing or corrupt
   //   v2Ran   v2 has run in this data dir (a clock file or the v1 copy is there)
   //   backup  () → the newest readable v2 backup, or undefined
-  // source: read | migrate | fresh | recovered. suspect means the state may be
+  // source: read | setAside | fresh | recovered. setAside: a v1 file on the first
+  // v2 launch; it is copied aside and v2 starts empty (docs/INTAKE.md, "Fresh
+  // start"), keeping only its preferences. suspect means the state may be
   // older or smaller than what was last synced, so the clock must not stamp it
   // as new (see recoverClock). keepCopy: set the bad data file aside first.
   function planLoad(o) {
@@ -472,8 +577,17 @@
       return { source: 'recovered', raw: o.backup(), suspect: true, keepCopy: o.exists };
     }
     if (!usable) return { source: 'fresh', raw: undefined, suspect: false, keepCopy: false };
-    if (isV1(o.data)) return { source: 'migrate', raw: o.data, suspect: false, keepCopy: false };
+    if (isV1(o.data)) return { source: 'setAside', raw: freshFromV1(o.data), suspect: false, keepCopy: false };
     return { source: 'read', raw: o.data, suspect: !o.clock, keepCopy: false };
+  }
+
+  // An empty v2 state that keeps a v1 file's preferences (name, theme, Today
+  // size) and nothing else. migrateV1 stays for bringing things back by hand.
+  function freshFromV1(data) {
+    const out = emptyState();
+    const prefs = data && !Array.isArray(data) && data.preferences && typeof data.preferences === 'object' ? data.preferences : {};
+    out.preferences = Object.assign({}, DEFAULT_PREFS, prefs);
+    return out;
   }
 
   function isV1(data) {
@@ -791,7 +905,9 @@
     completeItem, uncompleteItem, doneOn, streak,
     startDay, needsPick, carryOvers,
     ingestSuggestions, ingestInbox, suggestionKey, pruneSeen,
-    emptyState, normalizeState, isV1, migrateV1,
+    KINDS, SUGGESTION_DAYS, SLIDE_DAYS, DECISIONS,
+    pendingSuggestions, expireSuggestions, slideToLater, weekStart, slidToReport, fromCollector, decisionEntry,
+    emptyState, normalizeState, isV1, migrateV1, freshFromV1,
     toRecords, applyPath, applyPatch, recordHashes, applyPatchIfUnchanged,
     planLoad, stamp, recoverClock, parseClockFile, clockFile, adoptRemoteWhenDormant, TOMBSTONE_DAYS, toWire, wireValue, applyRemote, localIsNewer, newerThanRemote, purgeTombstones,
     encodeKey, decodeKey, pathToKey, keyToPath
