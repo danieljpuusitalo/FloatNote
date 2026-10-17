@@ -1036,6 +1036,35 @@ test('patch window: a delete whose save was in flight survives on both sides', (
   assert.equal(C.stableStringify(C.toRecords(rendered)), C.stableStringify(C.toRecords(replayed)));
 });
 
+test('commitSave: an in-flight save keeps the patch it had not seen, and the local edit', () => {
+  const main = C.migrateV1(v1Fixture(), T);
+  const [id, other] = Object.keys(main.items);
+  const page = C.clone(main);
+  page.items[other].text = 'edited here';
+  const saved = C.clone(page);                        // the save is in flight
+  const p1 = remoteEdit(main, id, 'seen');
+  const u1 = { seq: 1, patch: p1, before: mainApplies(main, p1) };
+  const p2 = Object.assign(remoteEdit(main, id, 'not seen yet'), remoteEdit(main, other, 'edited elsewhere'));
+  const u2 = { seq: 2, patch: p2, before: mainApplies(main, p2) };
+  saved.items[id].text = 'seen';                      // the page had applied patch 1
+  const r = C.commitSave(saved, 1, [u1, u2]);
+  assert.deepEqual(r.unseen.map(e => e.seq), [2], 'patch 1 is done with');
+  assert.equal(r.state.items[id].text, 'not seen yet', 'patch 2 is replayed onto the untouched record');
+  assert.equal(r.state.items[other].text, 'edited here', 'but not over the local edit');
+  assert.equal(C.commitSave(saved, 2, [u1, u2]).unseen.length, 0);
+  assert.equal(C.commitSave(saved, undefined, [u1, u2]).unseen.length, 2, 'no seq: nothing is dropped');
+});
+
+test('negative control: a save that ignores unseen patches stamps the old value', () => {
+  const main = C.migrateV1(v1Fixture(), T);
+  const id = Object.keys(main.items)[0];
+  const saved = C.clone(main);
+  const p = remoteEdit(main, id, 'not seen yet');
+  const before = mainApplies(main, p);
+  assert.notEqual(C.commitSave(saved, 0, []).state.items[id].text, 'not seen yet', 'without the patch the old text would be stamped');
+  assert.equal(C.commitSave(saved, 0, [{ seq: 1, patch: p, before }]).state.items[id].text, 'not seen yet');
+});
+
 test('negative control: a plain patch apply resurrects the deleted item', () => {
   const main = C.migrateV1(v1Fixture(), T);
   const id = Object.keys(main.items)[0];

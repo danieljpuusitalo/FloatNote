@@ -669,6 +669,7 @@
       font-size: 12px; outline: none;
     }
     .set-row input:focus { border-color: var(--accent); }
+    .set-row.hidden { display: none; }
     .set-note { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
     .set-note:empty { display: none; }
     .set-msg { font-size: 11px; color: var(--red); }
@@ -1022,6 +1023,52 @@
     }
     .habit-stat-card.at-risk .habit-stat-label { color: var(--red); }
 
+    /* === Phone ===
+       :root.web is the browser copy (server/build-public.mjs, web/web-api.js):
+       no window to manage, the screen's own safe areas. (hover: none) is a
+       touch screen: no hover, so a tapped row shows its actions, targets get
+       bigger, and inputs are 16px so iOS does not zoom into them. */
+    .due-btn { display: none; position: relative; }
+    .due-btn input {
+      position: absolute; top: -1px; left: -1px; width: calc(100% + 2px); height: calc(100% + 2px); opacity: 0;
+      border: 0; padding: 0; font-size: 16px; cursor: pointer;
+    }
+    :root.web body {
+      height: 100dvh;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+    :root.web .titlebar, :root.web .desk-only { display: none; }
+    :root.web .pick-overlay { padding: calc(14px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom)); }
+    :root.web .toast { bottom: calc(14px + env(safe-area-inset-bottom)); }
+    :root.web .onboarding-card { max-width: calc(100vw - 32px); }
+    @media (hover: none) {
+      .todo-item:hover:not(.sel) { background: none; border-color: transparent; }
+      .todo-item:hover .todo-actions { display: none; }
+      .todo-item.sel { flex-wrap: wrap; }
+      .todo-item.sel .todo-actions {
+        display: flex; flex-wrap: wrap; flex-basis: 100%; position: static;
+        gap: 6px; padding: 8px 0 2px 44px; background: none;
+      }
+      .todo-item { padding: 10px 8px; }
+      .todo-text { font-size: 15px; }
+      .todo-item input[type="checkbox"] { width: 22px; height: 22px; }
+      .todo-item input[type="checkbox"]:checked::after { left: 6px; top: 2px; width: 6px; height: 11px; }
+      .ctx-dot { width: 10px; height: 10px; margin-top: 7px; }
+      .act { font-size: 13px; padding: 7px 12px; border-radius: 7px; }
+      .due-btn { display: inline-block; }
+      .close-hint .act { font-size: 12px; padding: 5px 10px; }
+      .badge { font-size: 11px; padding: 2px 6px; }
+      input:not([type="checkbox"]), select, textarea, [contenteditable] { font-size: 16px; }
+      .tab { padding: 12px 8px; font-size: 12px; }
+      .theme-toggle { width: 36px; height: 36px; }
+      .ctx-filter button { padding: 6px 10px; font-size: 12px; }
+      .card-btn { padding: 10px; font-size: 13px; }
+      .card-btn kbd { display: none; }
+      .pick-row { padding: 10px 8px; font-size: 15px; }
+      .habit-manage-btn { opacity: 1; }
+      .habit-drop-target { border-color: var(--border-light); }
+    }
+
   </style>
 </head>
 <body>
@@ -1172,24 +1219,24 @@
           <button class="card-btn" id="sync-save">Connect</button>
         </div>
         <div class="set-msg" id="sync-msg"></div>
-        <div class="set-note">Use the same passphrase on your phone. Anyone who knows it can read your to-dos, so make it long.</div>
+        <div class="set-note" id="sync-note">Use the same passphrase on your phone. Anyone who knows it can read your to-dos, so make it long.</div>
         <div><button class="card-btn danger hidden" id="sync-off">Turn sync off</button></div>
       </div>
       <div class="set-sec">
         <div class="set-label">Today holds</div>
         <div class="seg" id="cap-seg"><button data-n="1">1</button><button data-n="2">2</button><button data-n="3">3</button><button data-n="4">4</button><button data-n="5">5</button></div>
       </div>
-      <div class="set-sec">
+      <div class="set-sec desk-only">
         <div class="set-label">Capture hotkey</div>
         <div class="set-row"><input type="text" id="hotkey-input" readonly title="Click, then press the keys"></div>
         <div class="set-note" id="hotkey-note"></div>
       </div>
-      <div class="set-sec">
+      <div class="set-sec desk-only">
         <label class="set-check"><input type="checkbox" id="login-check"> Start FloatNote when Windows starts</label>
         <div class="set-note" id="login-note"></div>
         <label class="set-check"><input type="checkbox" id="ontop-check"> Keep FloatNote above other windows</label>
       </div>
-      <div class="set-sec">
+      <div class="set-sec desk-only">
         <div class="set-label">Keyboard</div>
         <div class="set-note">The to-do list works without the mouse. Press <b>?</b> on the list to see the keys.</div>
       </div>
@@ -1272,6 +1319,8 @@
     // state for the hint but never saves (loaded stays false); it hands the
     // text to main, which passes it on to the main window.
     const CAPTURE = document.documentElement.classList.contains('capture');
+    // A touch screen: a tap selects a row (and shows its actions) before it edits.
+    const TOUCH = window.matchMedia('(hover: none)').matches;
     let state = FN.emptyState();
     let loaded = false;
     let saveTimeout = null;
@@ -2190,6 +2239,8 @@
       }
 
       notesEditor.addEventListener('contextmenu', (e) => {
+        // A long press on a phone keeps its own menu (select, copy, paste).
+        if (TOUCH) return;
         e.preventDefault();
         saveSelection();
 
@@ -2556,6 +2607,10 @@
           acts.push('<button class="act" data-act="move" data-to="waiting" title="Waiting on someone">Wait</button>');
           acts.push('<button class="act" data-act="move" data-to="later">Later</button>');
         }
+        // Touch only (CSS): the date input covers the button, so the tap opens
+        // the phone's own picker. The desktop has D and the due badge.
+        acts.push('<span class="act due-btn">Due<input type="date" data-due-for="' + escapeHtml(item.id) + '" value="' +
+          escapeHtml(item.due || '') + '" aria-label="Due date"></span>');
       }
       acts.push('<button class="act del" data-act="drop" title="Drop">×</button>');
       return '<div class="' + cls + '" data-id="' + escapeHtml(item.id) + '">' +
@@ -2888,6 +2943,14 @@
     // One hidden date input, opened next to the badge that was clicked.
     let dueInput = null;
     let dueTarget = null;
+    function setDue(id, value) {
+      const item = state.items[id];
+      if (!item) return;
+      if (FN.isDateStr(value)) item.due = value;
+      else delete item.due;
+      item.touchedAt = Date.now();
+      changed();
+    }
     function pickDue(id, anchor) {
       if (!state.items[id]) return;
       if (!dueInput) {
@@ -2895,14 +2958,7 @@
         dueInput.type = 'date';
         dueInput.style.cssText = 'position:fixed;opacity:0;width:1px;height:1px;border:0;padding:0;pointer-events:none;';
         document.body.appendChild(dueInput);
-        dueInput.addEventListener('change', () => {
-          const item = state.items[dueTarget];
-          if (!item) return;
-          if (FN.isDateStr(dueInput.value)) item.due = dueInput.value;
-          else delete item.due;
-          item.touchedAt = Date.now();
-          changed();
-        });
+        dueInput.addEventListener('change', () => setDue(dueTarget, dueInput.value));
       }
       const r = anchor.getBoundingClientRect();
       dueInput.style.left = r.left + 'px';
@@ -2945,11 +3001,17 @@
 
     // --- To-do: events (delegated) ---
     const todoScroll = document.getElementById('todo-scroll');
+    let tapOnSel = false;   // the press landed on the row that was already selected
     todoScroll.addEventListener('mousedown', (e) => {
       const row = e.target.closest('.todo-item[data-id]');
-      if (!row || row.dataset.id === selId) return;
+      tapOnSel = !!row && row.dataset.id === selId;
+      if (!row || tapOnSel) return;
       selId = row.dataset.id;
       applySel(false);
+    });
+    todoScroll.addEventListener('change', (e) => {
+      const id = e.target.dataset && e.target.dataset.dueFor;
+      if (id) setDue(id, e.target.value);
     });
     todoScroll.addEventListener('click', (e) => {
       const el = e.target.closest('[data-act]');
@@ -2958,7 +3020,8 @@
       const row = el.closest('[data-id]');
       const id = row && row.dataset.id;
       switch (act) {
-        case 'edit': startEdit(id, el); break;
+        // On touch the first tap only selects, so the row's actions can show.
+        case 'edit': if (!TOUCH || tapOnSel) startEdit(id, el); break;
         case 'ctx': toggleCtx(id); break;
         case 'due': pickDue(id, el); break;
         case 'move': moveTo(id, el.dataset.to); break;
@@ -3730,54 +3793,63 @@
           e.preventDefault();
           target.classList.remove('drag-over');
           const parts = e.dataTransfer.getData('text/plain').split('|');
-          const srcHabitId = parts[0];
-          const srcDay = parseInt(parts[1]);
-          const srcDate = parts[2];
-          const tgtHabitId = target.dataset.habit;
-          const tgtDay = parseInt(target.dataset.day);
-          const tgtDate = target.dataset.date;
-
-          if (srcHabitId !== tgtHabitId) return;
-          const habit = state.habits.find(h => h.id === srcHabitId);
+          if (parts[0] !== target.dataset.habit) return;
+          moveHabitSlot(parts[0], parseInt(parts[1]), parts[2], parseInt(target.dataset.day), target.dataset.date);
+        });
+        // No drag on a touch screen: tapping an empty day moves the nearest
+        // unticked slot of that habit there.
+        if (TOUCH) target.addEventListener('click', () => {
+          const habit = state.habits.find(h => h.id === target.dataset.habit);
           if (!habit) return;
-          const weekKey = weekDays[0];
-
-          // Get current effective layout, apply the drag, then diff against base
-          const current = getEffectiveSchedule(habit, weekDays);
-          current[srcDay] = false;
-          current[tgtDay] = true;
-
-          // Clear all existing move keys for this habit+week
-          for (let f = 0; f < 7; f++) {
-            delete state.habitLog['move:' + srcHabitId + ':' + weekKey + ':' + f];
-          }
-
-          // Write fresh move keys: for each base day that ended up somewhere else
-          const base = DAY_NAMES.map((_, i) => isHabitScheduled(habit, i));
-          const baseDays = base.map((v, i) => v ? i : -1).filter(i => i >= 0);
-          const currentDays = current.map((v, i) => v ? i : -1).filter(i => i >= 0);
-
-          // Match base slots to current slots by position (preserve order)
-          baseDays.sort((a, b) => a - b);
-          currentDays.sort((a, b) => a - b);
-          for (let j = 0; j < baseDays.length; j++) {
-            if (baseDays[j] !== currentDays[j]) {
-              state.habitLog['move:' + srcHabitId + ':' + weekKey + ':' + baseDays[j]] = currentDays[j];
-            }
-          }
-
-          // Migrate check data
-          const srcCheckKey = srcHabitId + ':' + srcDate;
-          const tgtCheckKey = srcHabitId + ':' + tgtDate;
-          if (state.habitLog[srcCheckKey]) {
-            state.habitLog[tgtCheckKey] = true;
-            delete state.habitLog[srcCheckKey];
-          }
-
-          scheduleSave();
-          renderHabitTracker();
+          const day = parseInt(target.dataset.day);
+          const sched = getEffectiveSchedule(habit, weekDays);
+          const from = sched.map((on, i) => on && !state.habitLog[habit.id + ':' + weekDays[i]] ? i : -1)
+            .filter(i => i >= 0).sort((a, b) => Math.abs(a - day) - Math.abs(b - day))[0];
+          if (from !== undefined) moveHabitSlot(habit.id, from, weekDays[from], day, target.dataset.date);
         });
       });
+
+      // Moves one scheduled slot of a habit to another day of the shown week.
+      function moveHabitSlot(srcHabitId, srcDay, srcDate, tgtDay, tgtDate) {
+        const habit = state.habits.find(h => h.id === srcHabitId);
+        if (!habit) return;
+        const weekKey = weekDays[0];
+
+        // Get current effective layout, apply the drag, then diff against base
+        const current = getEffectiveSchedule(habit, weekDays);
+        current[srcDay] = false;
+        current[tgtDay] = true;
+
+        // Clear all existing move keys for this habit+week
+        for (let f = 0; f < 7; f++) {
+          delete state.habitLog['move:' + srcHabitId + ':' + weekKey + ':' + f];
+        }
+
+        // Write fresh move keys: for each base day that ended up somewhere else
+        const base = DAY_NAMES.map((_, i) => isHabitScheduled(habit, i));
+        const baseDays = base.map((v, i) => v ? i : -1).filter(i => i >= 0);
+        const currentDays = current.map((v, i) => v ? i : -1).filter(i => i >= 0);
+
+        // Match base slots to current slots by position (preserve order)
+        baseDays.sort((a, b) => a - b);
+        currentDays.sort((a, b) => a - b);
+        for (let j = 0; j < baseDays.length; j++) {
+          if (baseDays[j] !== currentDays[j]) {
+            state.habitLog['move:' + srcHabitId + ':' + weekKey + ':' + baseDays[j]] = currentDays[j];
+          }
+        }
+
+        // Migrate check data
+        const srcCheckKey = srcHabitId + ':' + srcDate;
+        const tgtCheckKey = srcHabitId + ':' + tgtDate;
+        if (state.habitLog[srcCheckKey]) {
+          state.habitLog[tgtCheckKey] = true;
+          delete state.habitLog[srcCheckKey];
+        }
+
+        scheduleSave();
+        renderHabitTracker();
+      }
 
       // Stats row
       let weekCompleted = 0, weekScheduled = 0;
@@ -4129,7 +4201,7 @@
       if (s.mode === 'connecting') return ['', 'Connecting\u2026'];
       if (s.mode === 'offline') return ['', 'Offline. Changes are kept and sync when the connection is back.'];
       if (s.mode === 'error') return ['error', 'Not syncing: ' + (s.error || 'unknown error')];
-      return ['', 'Off. Nothing leaves this computer.'];
+      return ['', i.web ? 'Not paired. Nothing leaves this phone.' : 'Off. Nothing leaves this computer.'];
     }
 
     function renderSettings() {
@@ -4139,8 +4211,19 @@
       st.className = 'set-status ' + cls;
       st.textContent = text;
       syncOff.classList.toggle('hidden', !info.configured);
-      syncPass.placeholder = info.configured ? 'New passphrase, to switch' : 'Passphrase, at least 8 characters';
-      document.getElementById('sync-save').textContent = info.configured ? 'Switch' : 'Connect';
+      if (info.web) {
+        // The browser pairs with the server's setup key; once paired there is nothing to type.
+        syncPass.parentElement.classList.toggle('hidden', info.configured);
+        syncPass.placeholder = 'Setup key';
+        document.getElementById('sync-save').textContent = 'Pair';
+        document.getElementById('sync-note').textContent = info.configured
+          ? 'Paired with the FloatNote server.'
+          : 'The setup key is the one set on the FloatNote server. It is used once to pair this phone and is not kept.';
+        if (!syncOff.dataset.armed) syncOff.textContent = 'Unpair this phone';
+      } else {
+        syncPass.placeholder = info.configured ? 'New passphrase, to switch' : 'Passphrase, at least 8 characters';
+        document.getElementById('sync-save').textContent = info.configured ? 'Switch' : 'Connect';
+      }
       document.querySelectorAll('#cap-seg button').forEach(b => b.classList.toggle('on', Number(b.dataset.n) === todayCap()));
       const recording = document.activeElement === hotkeyInput;
       if (!recording) hotkeyInput.value = state.preferences.hotkey || FN.DEFAULT_PREFS.hotkey;
@@ -4170,8 +4253,8 @@
       settingsEl.classList.add('hidden');
       syncPass.value = '';
       syncMsg.textContent = '';
-      syncOff.textContent = 'Turn sync off';
       delete syncOff.dataset.armed;
+      syncOff.textContent = info && info.web ? 'Unpair this phone' : 'Turn sync off';
     }
 
     async function setPassphrase(p) {
@@ -4182,7 +4265,7 @@
     }
     function connectSync() {
       const p = syncPass.value.trim();
-      if (!p) { syncMsg.textContent = 'Type a passphrase first.'; return; }
+      if (!p) { syncMsg.textContent = info && info.web ? 'Type the setup key first.' : 'Type a passphrase first.'; return; }
       setPassphrase(p);
     }
 
@@ -4193,13 +4276,15 @@
     syncPass.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); connectSync(); } });
     // Turning off forgets the passphrase, so it takes a second click.
     syncOff.addEventListener('click', async () => {
+      const web = info && info.web;
       if (!syncOff.dataset.armed) {
         syncOff.dataset.armed = '1';
-        syncOff.textContent = 'Click again: you will need the passphrase to turn it back on';
+        syncOff.textContent = web ? 'Tap again: you will need the setup key to pair again'
+          : 'Click again: you will need the passphrase to turn it back on';
         return;
       }
       delete syncOff.dataset.armed;
-      syncOff.textContent = 'Turn sync off';
+      syncOff.textContent = web ? 'Unpair this phone' : 'Turn sync off';
       await setPassphrase('');
     });
     document.getElementById('cap-seg').addEventListener('click', (e) => {
@@ -4282,6 +4367,9 @@
     // --- Hotkey capture ---
     const pendingCaptures = [];
     window.api.onCaptured((raw) => {
+      // Shared from another app on the phone: it lands in the box to check
+      // and send, since a shared link is rarely a to-do as it stands.
+      if (window.api.web) { captureInput.value = raw; updateCaptureHint(); return; }
       if (loaded) addFromCapture(raw, true);
       else pendingCaptures.push(raw);
     });

@@ -249,8 +249,11 @@ async function device(cl, name, skew) {
   return d;
 }
 
+// The budget is time, not event-loop turns: inflight also counts the token hash
+// in S.authenticate, which runs on the threadpool, and under a parallel test run
+// 200 turns can pass (in about 3ms) before one hash finishes.
 async function settle(cl) {
-  for (let i = 0; i < 200; i++) {
+  for (const end = Date.now() + 5000; Date.now() < end;) {
     await new Promise(r => setImmediate(r));
     if (cl.inflight === 0) {
       await new Promise(r => setImmediate(r));

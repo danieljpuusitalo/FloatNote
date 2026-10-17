@@ -131,17 +131,10 @@ function applyLoginItem(prefs) {
   appliedLoginItem = want;
 }
 
-// seenSeq: the last remote patch the renderer had applied when it saved. Any
-// patch after that is re-applied first, so a save already in flight when a
-// remote change arrived cannot stamp the old value as newer and push it back.
-// Only onto records the renderer left as they were before the patch: one it
-// changed is a newer local edit, and this save stamps it.
+// seenSeq: the last remote patch the renderer had applied when it saved (see
+// core.commitSave, shared with web-api.js).
 function saveState(data, seenSeq) {
-  state = C.normalizeState(data);
-  if (typeof seenSeq === 'number') {
-    unseen = unseen.filter(e => e.seq > seenSeq);
-    for (const e of unseen) C.applyPatchIfUnchanged(state, e.patch, e.before);
-  }
+  ({ state, unseen } = C.commitSave(data, seenSeq, unseen));
   dailyBackup();
   writeJsonAtomic(DATA_PATH, state);
   const changed = C.stamp(clock, C.toRecords(state), Date.now());

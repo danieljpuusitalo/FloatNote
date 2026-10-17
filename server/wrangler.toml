@@ -5,6 +5,11 @@ main = "worker.js"
 compatibility_date = "2026-10-01"
 workers_dev = true
 
+# The phone's copy of the app, built by build-public.mjs (npm run deploy runs it).
+# A path that is not a file here goes to worker.js, which answers /api/*.
+[assets]
+directory = "./public"
+
 [[durable_objects.bindings]]
 name = "FLOATNOTE"
 class_name = "FloatNoteDO"
@@ -16,6 +21,9 @@ new_sqlite_classes = ["FloatNoteDO"]
 # A throwaway copy for two-device tests, with its own data and its own key.
 [env.staging]
 name = "floatnote-staging"
+
+[env.staging.assets]
+directory = "./public"
 
 [[env.staging.durable_objects.bindings]]
 name = "FLOATNOTE"

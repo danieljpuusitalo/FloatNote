@@ -87,6 +87,50 @@ then `npx wrangler secret put SETUP_KEY --env staging`) and run the two-window c
 against it, which is the first time the Durable Object adapter itself runs.
 Blocked on Daniel: wrangler is not logged in (`! npx wrangler login`, once).
 
+**Phase 3 (the phone is the same app) is built and verified locally, on branch
+`phase3-phone` (from `phase2-server`), not deployed.** Nothing changes for Daniel yet.
+
+- The Worker serves the app as static assets (`[assets]` in `wrangler.toml`,
+  `server/public/`, gitignored). `server/build-public.mjs` builds it from this
+  repo's `index.html`, `core.js`, `sync.js` plus `web/` (`web-api.js`, `sw.js`,
+  manifest with a share target, icons, `_headers`). Its page edits are
+  exact-match and throw if an anchor moves. This replaced the plan's HTMLRewriter
+  idea, so a wrong page fails the build, not the phone.
+- `web/web-api.js` is `window.api` for a browser: state and clock in IndexedDB,
+  `sync.js` in the page over `httpBackend`, pairing with the setup key (used once,
+  never stored), flush on `visibilitychange` / `pagehide`. **Fresh-device guard:** a
+  browser that never synced stamps nothing until its first sync, so an empty phone
+  cannot wipe the desktop. `core.commitSave` is the save path main and the browser
+  now share (tested).
+- `index.html` phone layout: `:root.web` hides the titlebar and the desktop-only
+  settings (hotkey, login, keyboard); `@media (hover: none)` / `TOUCH` makes the
+  first tap select a row and show its actions (Today/Next/Wait/Later, Due, drop)
+  and the second tap edit; a Due button with the native date input over it;
+  touch-sized targets; inputs at 16px; a tap on an empty habit day moves the
+  nearest open slot there; the custom Notes menu is off on touch; shared text
+  lands in the capture box to check, not straight on a list.
+
+Verified: `npm test` 147/147, 10 full runs in a row green (`test/web.test.js` is
+new: the page edits, the desktop file keeping `connect-src 'none'`, a negative
+control where a missing or doubled anchor throws, and every service-worker shell
+file existing). A flaky e2e helper was fixed: `settle()` counted event-loop turns
+while waiting on a threadpool hash, and lost under the parallel run about 1 run in
+3. `node tools/check-phone.mjs`: all 50 checks pass. Real desktop window plus
+headless Edge at 390px with touch; pairing through Settings; every list action by
+real touch events, each reaching the desktop; capture; share; notes; habit tap;
+the desktop page keeping hover and its settings. Negative control: after a fresh
+phone joins, the desktop's records are byte-identical and the phone holds the
+same. It caught the Due input sitting 1px inside the button's border.
+
+**Not yet proven:** the Durable Object serving the page (needs the staging deploy)
+and a real phone. Both wait on `! npx wrangler login`. Then: deploy staging, open
+it on his phone, add to home screen, pair, and run the same list by hand.
+
+Accepted limits: two tabs of the app in one browser can overwrite each other's
+IndexedDB copy; iOS may evict storage of a site not added to the home screen (the
+server copy survives, the phone re-syncs); a fresh phone shows onboarding before
+it can pair (its answers are replaced by the desktop's on the first sync).
+
 **The direction is `docs/INTAKE.md`**: how to-dos flow in, and what earns a place.
 Read it before changing the pick, the drop folder or the skill.
 
@@ -141,9 +185,10 @@ Reality findings:
 
 ## Next
 
-1. Finish Phase 2 (staging deploy, above), then Phases 3 to 6 of
-   `bright-coalescing-pond.md`: phone, decisions relay, cutover (2.2.0), retire
-   Firebase.
+1. Daniel runs `! npx wrangler login`; then deploy staging, run the two-window
+   check and the phone check against it, and try it on his real phone (Phases 2
+   and 3 above). Then Phases 4 to 6 of `bright-coalescing-pond.md`: decisions
+   relay, cutover (2.2.0), retire Firebase.
 2. Watch keep rate per source in the run reports; Awaiting-their-reply is 0 of 3
    so far.
 3. U12, U16, U18 and the reasoned sync items, when they bite.

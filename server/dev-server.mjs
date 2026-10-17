@@ -5,11 +5,15 @@
 //
 //   SETUP_KEY=<throwaway key> node server/dev-server.mjs [port] [db file]
 //
-// Stopping and restarting it is how a hand-check takes the network away.
+// Stopping and restarting it is how a hand-check takes the network away. It
+// also serves the phone's copy of the app, built into server/public/ at start.
 import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
 import { createRequire } from 'node:module';
 import { DatabaseSync } from 'node:sqlite';
 import { WebSocketServer } from 'ws';
+import { build } from './build-public.mjs';
 
 const core = createRequire(import.meta.url)('../server-core.js');
 const port = Number(process.argv[2] || 8787);
@@ -26,6 +30,18 @@ const transaction = (fn) => {
 const sockets = new Set();    // { ws, device }
 const wss = new WebSocketServer({ noServer: true, handleProtocols: (p) => (p.has('floatnote') ? 'floatnote' : false) });
 
+const pub = build();
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json', '.png': 'image/png' };
+
+// What the Worker's static assets do: / is index.html, _headers is not served.
+function serveFile(res, pathname) {
+  const rel = pathname === '/' ? 'index.html' : decodeURIComponent(pathname.slice(1));
+  const file = path.join(pub, rel);
+  if (!file.startsWith(pub + path.sep) || rel.startsWith('_') || !fs.existsSync(file) || !fs.statSync(file).isFile()) return reply(res, 404, { error: 'not found' });
+  res.writeHead(200, { 'content-type': TYPES[path.extname(file)] || 'application/octet-stream', 'cache-control': 'no-cache', 'x-content-type-options': 'nosniff' });
+  res.end(fs.readFileSync(file));
+}
+
 function reply(res, status, body) {
   res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' });
   res.end(JSON.stringify(body));
@@ -33,7 +49,7 @@ function reply(res, status, body) {
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
-  if (!url.pathname.startsWith('/api/')) return reply(res, 404, { error: 'not found' });
+  if (!url.pathname.startsWith('/api/')) return req.method === 'GET' ? serveFile(res, url.pathname) : reply(res, 404, { error: 'not found' });
   let body;
   if (req.method === 'POST') {
     const chunks = [];

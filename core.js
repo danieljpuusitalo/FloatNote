@@ -831,6 +831,24 @@
     return applied;
   }
 
+  // One save from the page, in whatever holds the clock (main.js on the desktop,
+  // web-api.js in the browser). unseen: [{ seq, patch, before }], the remote
+  // patches sent to the page; seenSeq is the last one it had applied when it
+  // saved. Any patch after that is re-applied first, so a save already in flight
+  // when a remote change arrived cannot stamp the old value as newer and push it
+  // back; only onto records the page left as they were before the patch, since
+  // one it changed is a newer local edit. The caller stamps once the state is
+  // stored. Returns { state, unseen }: the patches still newer than the page.
+  function commitSave(data, seenSeq, unseen) {
+    const state = normalizeState(data);
+    let left = unseen || [];
+    if (typeof seenSeq === 'number') {
+      left = left.filter(e => e.seq > seenSeq);
+      for (const e of left) applyPatchIfUnchanged(state, e.patch, e.before);
+    }
+    return { state, unseen: left };
+  }
+
   // ---------- clock: per-record timestamps without touching the UI code ----------
   //
   // clock: { path → { h: hash, t: ms, d?: true } }. The renderer saves whole
@@ -999,7 +1017,7 @@
     KINDS, SUGGESTION_DAYS, SLIDE_DAYS, DECISIONS,
     pendingSuggestions, expireSuggestions, slideToLater, weekStart, slidToReport, fromCollector, decisionEntry,
     emptyState, normalizeState, isV1, migrateV1, freshFromV1,
-    toRecords, applyPath, applyPatch, recordHashes, applyPatchIfUnchanged,
+    toRecords, applyPath, applyPatch, recordHashes, applyPatchIfUnchanged, commitSave,
     planLoad, stamp, recoverClock, parseClockFile, clockFile, adoptRemoteWhenDormant, TOMBSTONE_DAYS, toWire, wireValue, applyRemote, localIsNewer, newerThanRemote, purgeTombstones,
     encodeKey, decodeKey, pathToKey, keyToPath
   };

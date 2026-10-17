@@ -11,7 +11,8 @@ The design for how to-dos flow in is `docs/INTAKE.md`. The original v2 plan:
 
 A separate macOS port lives at `~/FloatNote-mac` (v1, out of scope) and a
 Firebase-backed web/PWA port at `~/FloatNote-web`. They are independent codebases,
-not build targets of this one.
+not build targets of this one. FloatNote-web is being retired: the phone now runs
+this repo's own `index.html`, served by the sync server (Phase 3 of the plan below).
 
 ## Verify
 
@@ -22,13 +23,22 @@ drop-folder intake (suggestions, direct adds, done hints, dedupe). `sync.test.js
 convergence, deletes, unticks, reconnect catch-up, tombstone purge, errors.
 `server.test.js` covers `server-core.js` (the sync server's logic, its SQLite store
 against `node:sqlite`) and `sync.js` + `httpBackend` end to end against it over a
-fake network. All three carry negative controls.
+fake network. `web.test.js` covers `server/build-public.mjs`, the phone's copy of the
+page. All four carry negative controls.
 
 `node tools/check-server-sync.mjs` is the two-window hand-check for the server
 backend: two real Electron instances on scratch data through `server/dev-server.mjs`,
 including the server going away and coming back. Needs `cd server && npm install`.
 
-It covers the logic, not the UI. Anything about `index.html` or the window is a
+`node tools/check-phone.mjs` is the phone hand-check: a real desktop window on
+invented data plus headless Edge emulating a 390px touch phone, pairing through
+Settings and working every list action by real touch events. It includes the
+negative control that a fresh phone joining leaves the desktop's records
+byte-identical, and it checks the desktop page kept its hover and settings.
+Screenshots land in the scratch dir it prints. **Any change to `index.html` needs
+this run as well as a desktop look**: the same file is both UIs now.
+
+`npm test` covers the logic, not the UI. Anything about `index.html` or the window is a
 hand-check (`npm start`, see the data-dir trap below). Say which one a claim is.
 
 A hand-check can be driven without touching the real desktop: launch
@@ -55,9 +65,14 @@ features and the drop-folder format; version in `package.json`.
    Electron), loaded by `index.html` via `<script src>` as `window.FNCore` and by
    `main.js` via `require`. It exists so the logic is testable. Logic that can be
    tested goes there; UI stays in `index.html`.
+   **The second is `web/web-api.js`**: `window.api` for a browser, the stand-in for
+   `preload.js` + `main.js` (IndexedDB storage, `sync.js` in the page). No UI. The
+   phone layout itself is in `index.html`, switched on by `:root.web` (browser) and
+   `@media (hover: none)` / `TOUCH` (touch).
 3. `build.files` is an allowlist: `main.js`, `preload.js`, `index.html`, `core.js`,
    `sync.js`, `package.json`, `build/**`. A new runtime file not added there is simply absent
-   from the installer, with no error.
+   from the installer, with no error. `web/`, `server/` and `server-core.js` stay out
+   of it on purpose: they are the phone and the server, not the desktop.
 4. Test fixtures are invented data. Never paste real to-dos into `test/`.
 
 ## Stop-points
@@ -117,4 +132,12 @@ features and the drop-folder format; version in `package.json`.
   locally with `server/dev-server.mjs`, and test the Durable Object itself on the
   staging Worker (`npx wrangler deploy --env staging`). Do not use other
   projects' Cloudflare tokens.
+- **The phone's page is built, not written.** `server/build-public.mjs` copies
+  `index.html` into the gitignored `server/public/` with a few exact-match edits
+  (`class="web"`, `connect-src 'self'`, the viewport, the extra scripts, the PWA
+  head tags). Each anchor must match exactly once or the build throws, so moving
+  the CSP meta, the `<script src="core.js">` tag or `</head>` in `index.html` breaks
+  `npm run deploy` loudly, by design. `dev-server.mjs` and every deploy script run
+  the build first. Bump `CACHE` in `web/sw.js` only if the shell file list changes;
+  the worker is network-first, so new code reaches the phone without it.
 - Electron 40 with electron-builder 25. NSIS one-click, per-user install.
