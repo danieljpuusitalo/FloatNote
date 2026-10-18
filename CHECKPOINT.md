@@ -147,6 +147,18 @@ IndexedDB copy; iOS may evict storage of a site not added to the home screen (th
 server copy survives, the phone re-syncs); a fresh phone shows onboarding before
 it can pair (its answers are replaced by the desktop's on the first sync).
 
+**Cleanup pass (2026-10-18), branch `cleanup` (from `phase3-phone`), pushed, not
+merged.** Dead code out (unused CSS, the `api.quit` chain, test-only `needsTriage`
+/ `ingestSuggestions`, mac build config, `create-shortcut.js`, six orphan
+screenshots); the Notes keyboard and right-click toggles merged into one
+`toggleBullets` / `toggleChecklist`, which fixes Ctrl+Shift+L turning a heading into
+a checklist line; `.gitattributes` makes every file LF. New hand-check
+`tools/check-notes.mjs` (17 checks; against the old `index.html` the heading case
+fails, the rest pass). Verified: `npm test` 148/148, `check-phone` 50/50,
+`check-notes` 17/17. **Branch chain to land, in order:** `phase2-server` →
+`phase3-phone` → `cleanup`, none merged to `master`. Merge when the real-phone test
+passes; nothing here reaches Daniel before a release.
+
 **The direction is `docs/INTAKE.md`**: how to-dos flow in, and what earns a place.
 Read it before changing the pick, the drop folder or the skill.
 
