@@ -251,10 +251,11 @@ test('triage card appears at 5 stale items, not 4', () => {
   const items = [];
   for (let n = 0; n < 4; n++) items.push(C.makeItem({ id: 's' + n, text: 's' + n }, T - 20 * DAY));
   const s = stateWith(items);
-  assert.ok(!C.needsTriage(s, T));
+  assert.equal(C.staleItems(s, T).length, 4);
+  assert.ok(4 < C.TRIAGE_THRESHOLD);
   s.items.s4 = C.makeItem({ id: 's4', text: 's4' }, T - 20 * DAY);
-  assert.ok(C.needsTriage(s, T));
   assert.equal(C.staleItems(s, T).length, 5);
+  assert.ok(5 >= C.TRIAGE_THRESHOLD);
 });
 
 test('moving out of Today resets carriedDays', () => {
@@ -326,9 +327,12 @@ test('needsPick follows meta.lastPick', () => {
 
 // ---------- suggestions ----------
 
+// The suggestions alone, with nothing remembered between calls.
+const ingestSuggestions = (state, payload, now) => C.ingestInbox(state, payload, now, {}).added;
+
 test('suggestions: valid entries land as suggested, junk is skipped', () => {
   const s = stateWith([C.makeItem({ id: 'e', text: 'Already here' }, T)]);
-  const added = C.ingestSuggestions(s, [
+  const added = ingestSuggestions(s, [
     { text: 'Send Q3 numbers to Dana', who: 'Dana', due: '2026-10-05', ctx: 'work', list: 'next',
       source: { url: 'https://mail.example.com/thread/1', label: 'Re: Q3' } },
     { text: 'Chase signed SAFE', list: 'waiting', source: { url: 'javascript:alert(1)' } },
@@ -352,7 +356,7 @@ test('suggestions: valid entries land as suggested, junk is skipped', () => {
 
 test('suggestions: accepts { items: [...] } too', () => {
   const s = C.emptyState();
-  assert.equal(C.ingestSuggestions(s, { items: [{ text: 'a' }] }, T).length, 1);
+  assert.equal(ingestSuggestions(s, { items: [{ text: 'a' }] }, T).length, 1);
 });
 
 test('inbox: a second sweep of the same mail does not bring back a kept or dropped suggestion', () => {
@@ -700,9 +704,13 @@ test('wire: values survive as JSON text, including empty strings and arrays', ()
   }
 });
 
-test('applyRemote: only strictly newer wins; own echoes are no-ops', () => {
+test('applyRemote: newer wins, a tie goes to the remote copy; own echoes are no-ops', () => {
   const clock = { 'items/a': { h: C.hash({ v: 1 }), t: 100 } };
-  assert.equal(C.applyRemote(clock, 'items/a', { j: '{"v":2}', t: 100 }), null);
+  assert.equal(C.applyRemote({ 'items/a': { h: C.hash({ v: 1 }), t: 100 } }, 'items/a', { j: '{"v":1}', t: 100 }), null, 'an echo');
+  assert.equal(C.applyRemote({ 'items/a': { h: null, t: 100, d: true } }, 'items/a', { t: 100, d: true }), null, 'a tombstone echo');
+  assert.deepEqual(C.applyRemote({ 'items/a': { h: C.hash({ v: 1 }), t: 0 } }, 'items/a', { j: '{"v":2}', t: 0 }), { path: 'items/a', value: { v: 2 } }, 'a t 0 tie');
+  assert.deepEqual(C.applyRemote({ 'items/a': { h: C.hash({ v: 1 }), t: 0 } }, 'items/a', { t: 0, d: true }), { path: 'items/a', value: null }, 'a tie with a tombstone');
+  assert.equal(C.applyRemote(clock, 'items/a', { j: '{"v":1}', t: 100 }), null);
   assert.equal(C.applyRemote(clock, 'items/a', { j: '{"v":2}', t: 99 }), null);
   assert.ok(C.localIsNewer(clock, 'items/a', { t: 99 }));
   assert.deepEqual(C.applyRemote(clock, 'items/a', { j: '{"v":2}', t: 101 }), { path: 'items/a', value: { v: 2 } });
@@ -1034,6 +1042,35 @@ test('patch window: a delete whose save was in flight survives on both sides', (
   assert.equal(rendered.items[id], undefined, 'the renderer keeps it too');
   assert.equal(rendered.items[other].text, 'also elsewhere');
   assert.equal(C.stableStringify(C.toRecords(rendered)), C.stableStringify(C.toRecords(replayed)));
+});
+
+test('commitSave: an in-flight save keeps the patch it had not seen, and the local edit', () => {
+  const main = C.migrateV1(v1Fixture(), T);
+  const [id, other] = Object.keys(main.items);
+  const page = C.clone(main);
+  page.items[other].text = 'edited here';
+  const saved = C.clone(page);                        // the save is in flight
+  const p1 = remoteEdit(main, id, 'seen');
+  const u1 = { seq: 1, patch: p1, before: mainApplies(main, p1) };
+  const p2 = Object.assign(remoteEdit(main, id, 'not seen yet'), remoteEdit(main, other, 'edited elsewhere'));
+  const u2 = { seq: 2, patch: p2, before: mainApplies(main, p2) };
+  saved.items[id].text = 'seen';                      // the page had applied patch 1
+  const r = C.commitSave(saved, 1, [u1, u2]);
+  assert.deepEqual(r.unseen.map(e => e.seq), [2], 'patch 1 is done with');
+  assert.equal(r.state.items[id].text, 'not seen yet', 'patch 2 is replayed onto the untouched record');
+  assert.equal(r.state.items[other].text, 'edited here', 'but not over the local edit');
+  assert.equal(C.commitSave(saved, 2, [u1, u2]).unseen.length, 0);
+  assert.equal(C.commitSave(saved, undefined, [u1, u2]).unseen.length, 2, 'no seq: nothing is dropped');
+});
+
+test('negative control: a save that ignores unseen patches stamps the old value', () => {
+  const main = C.migrateV1(v1Fixture(), T);
+  const id = Object.keys(main.items)[0];
+  const saved = C.clone(main);
+  const p = remoteEdit(main, id, 'not seen yet');
+  const before = mainApplies(main, p);
+  assert.notEqual(C.commitSave(saved, 0, []).state.items[id].text, 'not seen yet', 'without the patch the old text would be stamped');
+  assert.equal(C.commitSave(saved, 0, [{ seq: 1, patch: p, before }]).state.items[id].text, 'not seen yet');
 });
 
 test('negative control: a plain patch apply resurrects the deleted item', () => {

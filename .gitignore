@@ -3,3 +3,6 @@ dist/
 .backups/
 .DS_Store
 *.log
+.wrangler/
+.dev.vars
+server/public/

@@ -45,7 +45,129 @@ build passed the same 6 checks, installed silently over 2.0.0 (items 3 before an
 after). A task run after install (19:17, result 0, 96 s, $0.97) stored
 `meta/lastRun` with sources and counts in the installed app's state.
 
-**Next: Phase 2** (`server-core.js`, the Worker, `httpBackend`), desktop opt-in only.
+**Phase 2 is built and verified locally, on branch `phase2-server`, not deployed.**
+Nothing changes for Daniel: the installed app still syncs over Firebase.
+
+- `server-core.js` (repo root, pure, not in the installer): records keyed by raw
+  path, newest `t` wins, a tie keeps the stored copy, an older write is answered
+  with the kept copy (`stale`), a purge removes tombstones only. Each accepted
+  write gets a sequence number; `GET /api/sync?since=n` is the catch-up. Device
+  tokens are stored as SHA-256, the first pairing needs the `SETUP_KEY` secret,
+  revoking a device closes its sockets. A broadcast over 900 KiB goes out as a
+  `changed` notice (Workers caps a socket message at 1 MiB).
+- `sync.js` `httpBackend(url, token)`: HTTP writes in chunks of 1000, a WebSocket
+  for changes (token in `Sec-WebSocket-Protocol`), catch-up on reconnect, on a new
+  listener and on a sequence gap, ping every 30 s and dead after 75 s silent,
+  reconnect backoff 1 s to 60 s. A network failure reads `offline`, not `error`,
+  and coming back online with a refused push waiting reconciles at once.
+- `server/`: `worker.js` (Worker + `FloatNoteDO`, SQLite storage, hibernating
+  sockets, ping answered without waking), `wrangler.toml` (production `floatnote`
+  and `--env staging`), its own `package.json` so wrangler stays out of the app.
+  `server/dev-server.mjs` is a Node stand-in on `node:sqlite` + `ws`, because
+  `wrangler dev` needs workerd, which has no Windows-on-Arm build.
+- Desktop opt-in for dev runs: `FLOATNOTE_SYNC=server` reads
+  `<data dir>/floatnote-server.json` (`{url, token}`, written by
+  `tools/pair-device.mjs`; never print it).
+
+Verified: `npm test` 141/141, 26 in `test/server.test.js` (server unit, SQLite vs
+in-memory parity with a negative control, auth, and `createSync` + `httpBackend`
+end to end over a fake network: offline, dropped and silent sockets, a lost
+broadcast, a slow clock, a revoked device, oversized changes, chunking). Mutations
+of the gap catch-up, the stale delivery, the notice and the `t 0` rule each fail
+their test. `node tools/check-server-sync.mjs`: two real Electron windows through
+the dev server, two passes of add, edit, tick, untick, delete, then the server
+stopped, both edit (offline, not error; nothing crosses), restarted: both converge
+with identical item records; no page exceptions. That check caught a real bug the
+unit tests had missed: `core.recoverClock` stamps unknown-age records `t 0`, which
+the server refused, so a recovered device could never push.
+`wrangler deploy --dry-run` bundles (14.6 KiB, the DO binding present).
+
+**Staging is deployed (2026-10-17)**: `https://floatnote-staging.daniel-jpuusitalo.workers.dev`,
+Cloudflare account daniel.jpuusitalo@gmail.com, version `e50687b6`. Deploy with
+`cd server && npm run deploy:staging` (local wrangler; the global one under
+`%APPDATA%
+pm` is broken and unused). Its SETUP_KEY is in
+`~/.floatnote-staging-setup-key`, outside every repo; never print it. Both hand-checks
+take `FLOATNOTE_CHECK_URL` + `FLOATNOTE_SETUP_KEY` to run against it: the
+two-window check passed both passes (the offline part is skipped, a deployed
+server cannot be stopped), and the phone check 50/50, twice.
+
+**The staging run found a real sync bug** the local runs could not (the dev
+server starts empty, staging keeps everything): two devices whose records are
+both `t 0` (clocks recovered, no clock file) with different copies never
+converged. The server kept its copy on a tie and said nothing; the device never
+adopts an equal `t`. Fixed: a tie now goes to the server's copy
+(`core.applyRemote`), and the server answers a tie with different content with
+the kept copy (`server-core.applyWrites`). New e2e test, and each half of the fix
+mutated back fails it.
+
+**Phase 3 (the phone is the same app) is built and verified locally, on branch
+`phase3-phone` (from `phase2-server`), not deployed.** Nothing changes for Daniel yet.
+
+- The Worker serves the app as static assets (`[assets]` in `wrangler.toml`,
+  `server/public/`, gitignored). `server/build-public.mjs` builds it from this
+  repo's `index.html`, `core.js`, `sync.js` plus `web/` (`web-api.js`, `sw.js`,
+  manifest with a share target, icons, `_headers`). Its page edits are
+  exact-match and throw if an anchor moves. This replaced the plan's HTMLRewriter
+  idea, so a wrong page fails the build, not the phone.
+- `web/web-api.js` is `window.api` for a browser: state and clock in IndexedDB,
+  `sync.js` in the page over `httpBackend`, pairing with the setup key (used once,
+  never stored), flush on `visibilitychange` / `pagehide`. **Fresh-device guard:** a
+  browser that never synced stamps nothing until its first sync, so an empty phone
+  cannot wipe the desktop. `core.commitSave` is the save path main and the browser
+  now share (tested).
+- `index.html` phone layout: `:root.web` hides the titlebar and the desktop-only
+  settings (hotkey, login, keyboard); `@media (hover: none)` / `TOUCH` makes the
+  first tap select a row and show its actions (Today/Next/Wait/Later, Due, drop)
+  and the second tap edit; a Due button with the native date input over it;
+  touch-sized targets; inputs at 16px; a tap on an empty habit day moves the
+  nearest open slot there; the custom Notes menu is off on touch; shared text
+  lands in the capture box to check, not straight on a list.
+
+Verified: `npm test` 147/147 (148 with the tie fix), 10 full runs in a row green (`test/web.test.js` is
+new: the page edits, the desktop file keeping `connect-src 'none'`, a negative
+control where a missing or doubled anchor throws, and every service-worker shell
+file existing). A flaky e2e helper was fixed: `settle()` counted event-loop turns
+while waiting on a threadpool hash, and lost under the parallel run about 1 run in
+3. `node tools/check-phone.mjs`: all 50 checks pass. Real desktop window plus
+headless Edge at 390px with touch; pairing through Settings; every list action by
+real touch events, each reaching the desktop; capture; share; notes; habit tap;
+the desktop page keeping hover and its settings. Negative control: after a fresh
+phone joins, the desktop's records are byte-identical and the phone holds the
+same. It caught the Due input sitting 1px inside the button's border.
+
+**Proven on staging:** the Durable Object serving the page and syncing it (above).
+**Not yet proven: a real phone.** Daniel opens the staging URL on his phone, adds it
+to the home screen, pairs in Settings with the key from
+`~/.floatnote-staging-setup-key`, and runs the list by hand. Staging holds only
+invented test data (each phone-check run clears its `Invented` items).
+
+Accepted limits: two tabs of the app in one browser can overwrite each other's
+IndexedDB copy; iOS may evict storage of a site not added to the home screen (the
+server copy survives, the phone re-syncs); a fresh phone shows onboarding before
+it can pair (its answers are replaced by the desktop's on the first sync).
+
+**Cleanup pass (2026-10-18), branch `cleanup` (from `phase3-phone`), pushed, not
+merged.** Dead code out (unused CSS, the `api.quit` chain, test-only `needsTriage`
+/ `ingestSuggestions`, mac build config, `create-shortcut.js`, six orphan
+screenshots); the Notes keyboard and right-click toggles merged into one
+`toggleBullets` / `toggleChecklist`, which fixes Ctrl+Shift+L turning a heading into
+a checklist line; `.gitattributes` makes every file LF. New hand-check
+`tools/check-notes.mjs` (17 checks; against the old `index.html` the heading case
+fails, the rest pass). Verified: `npm test` 148/148, `check-phone` 50/50,
+`check-notes` 17/17. **Branch chain to land, in order:** `phase2-server` →
+`phase3-phone` → `cleanup`, none merged to `master`. Merge when the real-phone test
+passes; nothing here reaches Daniel before a release.
+
+**Real-phone test (2026-10-18), on staging:** Daniel paired his iPhone and a Chrome tab
+on his PC; sync works both ways. His finding: Chrome on a computer "feels buggy". Fixed on
+`cleanup`: (1) the page stretched across the whole screen, buttons far from the text; it
+is now a 640px centred column in a wide browser; (2) **a click that ends an edit was
+lost** (the due badge, a row button, another row's tick): the blur rebuilt the list
+between press and release. This was in the Electron app too. The rebuild now waits for
+the release (`afterPress`). (3) Settings said "this phone" in any browser; now
+"this device". New `tools/check-browser.mjs` (12 checks; the pre-fix page fails 4).
+Verified: `npm test` 148/148, `check-phone` all passed, `check-notes` 17/17.
 
 **The direction is `docs/INTAKE.md`**: how to-dos flow in, and what earns a place.
 Read it before changing the pick, the drop folder or the skill.
@@ -101,8 +223,11 @@ Reality findings:
 
 ## Next
 
-1. Phases 2 to 6 of `bright-coalescing-pond.md`: server, phone, decisions relay,
-   cutover (2.2.0), retire Firebase.
+1. Daniel re-tries Chrome on staging after the fixes and lists anything else rough.
+   Then land the branch chain, cutover (2.2.0: the desktop app joins the server), then
+   Phases 4 and 6 of `bright-coalescing-pond.md` (decisions relay, retire Firebase).
+   Daniel's goal, stated 2026-10-18: the installed desktop app stays primary and
+   syncs with Chrome and the phone through the server.
 2. Watch keep rate per source in the run reports; Awaiting-their-reply is 0 of 3
    so far.
 3. U12, U16, U18 and the reasoned sync items, when they bite.

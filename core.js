@@ -224,10 +224,6 @@
       .sort((a, b) => (a.touchedAt || 0) - (b.touchedAt || 0));
   }
 
-  function needsTriage(state, now) {
-    return staleItems(state, now).length >= TRIAGE_THRESHOLD;
-  }
-
   // Next: dated first (soonest first), then undated, newest first.
   function compareNext(a, b) {
     if (a.due && b.due) return a.due < b.due ? -1 : a.due > b.due ? 1 : (b.createdAt || 0) - (a.createdAt || 0);
@@ -538,11 +534,6 @@
     return seen;
   }
 
-  // The suggestions alone, with nothing remembered between calls.
-  function ingestSuggestions(state, payload, now) {
-    return ingestInbox(state, payload, now, {}).added;
-  }
-
   // ---------- nothing rots (docs/INTAKE.md) ----------
 
   // Open suggestions, in the order they arrived (the collector writes best first).
@@ -831,6 +822,24 @@
     return applied;
   }
 
+  // One save from the page, in whatever holds the clock (main.js on the desktop,
+  // web-api.js in the browser). unseen: [{ seq, patch, before }], the remote
+  // patches sent to the page; seenSeq is the last one it had applied when it
+  // saved. Any patch after that is re-applied first, so a save already in flight
+  // when a remote change arrived cannot stamp the old value as newer and push it
+  // back; only onto records the page left as they were before the patch, since
+  // one it changed is a newer local edit. The caller stamps once the state is
+  // stored. Returns { state, unseen }: the patches still newer than the page.
+  function commitSave(data, seenSeq, unseen) {
+    const state = normalizeState(data);
+    let left = unseen || [];
+    if (typeof seenSeq === 'number') {
+      left = left.filter(e => e.seq > seenSeq);
+      for (const e of left) applyPatchIfUnchanged(state, e.patch, e.before);
+    }
+    return { state, unseen: left };
+  }
+
   // ---------- clock: per-record timestamps without touching the UI code ----------
   //
   // clock: { path → { h: hash, t: ms, d?: true } }. The renderer saves whole
@@ -926,19 +935,24 @@
   }
 
   // Decide one incoming record. Returns { path, value } to apply (value null =
-  // remove) or null when the local copy is as new or newer. Strictly-greater t
-  // wins, so our own writes echoing back are no-ops.
+  // remove) or null when the local copy is newer or the same. A tie goes to the
+  // remote copy: two devices whose clocks were recovered both hold t 0, and only
+  // deferring to the server's copy lets them converge. Our own writes echoing
+  // back carry the same content, so they are no-ops.
   function applyRemote(clock, path, wire) {
     if (!wire || typeof wire.t !== 'number') return null;
     const local = clock[path];
-    if (local && wire.t <= local.t) return null;
+    if (local && wire.t < local.t) return null;
     if (wire.d) {
+      if (local && wire.t === local.t && local.d) return null;
       clock[path] = { h: null, t: wire.t, d: true };
       return { path, value: null };
     }
     const v = wireValue(wire);
     if (v === undefined || v === null) return null;
-    clock[path] = { h: hash(v), t: wire.t };
+    const h = hash(v);
+    if (local && wire.t === local.t && !local.d && local.h === h) return null;
+    clock[path] = { h, t: wire.t };
     return { path, value: v };
   }
 
@@ -991,15 +1005,15 @@
     dateStr, isDateStr, parseDateStr, daysBetween, addDays,
     newId, stableStringify, hash, clone,
     parseDateWord, parseCapture,
-    makeItem, moveItem, isDone, isVisible, isStale, staleItems, needsTriage,
+    makeItem, moveItem, isDone, isVisible, isStale, staleItems,
     compareNext, listItems, openCount, todayCapOf,
     completeItem, uncompleteItem, doneOn, streak,
     startDay, needsPick, carryOvers,
-    ingestSuggestions, ingestInbox, suggestionKey, pruneSeen, recordRun, runStatus,
+    ingestInbox, suggestionKey, pruneSeen, recordRun, runStatus,
     KINDS, SUGGESTION_DAYS, SLIDE_DAYS, DECISIONS,
     pendingSuggestions, expireSuggestions, slideToLater, weekStart, slidToReport, fromCollector, decisionEntry,
     emptyState, normalizeState, isV1, migrateV1, freshFromV1,
-    toRecords, applyPath, applyPatch, recordHashes, applyPatchIfUnchanged,
+    toRecords, applyPath, applyPatch, recordHashes, applyPatchIfUnchanged, commitSave,
     planLoad, stamp, recoverClock, parseClockFile, clockFile, adoptRemoteWhenDormant, TOMBSTONE_DAYS, toWire, wireValue, applyRemote, localIsNewer, newerThanRemote, purgeTombstones,
     encodeKey, decodeKey, pathToKey, keyToPath
   };

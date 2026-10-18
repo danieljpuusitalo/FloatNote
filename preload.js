@@ -5,7 +5,6 @@ contextBridge.exposeInMainWorld('api', {
   saveData: (data, seenSeq) => ipcRenderer.invoke('save-data', data, seenSeq),
   minimize: () => ipcRenderer.send('minimize'),
   close: () => ipcRenderer.send('close'),
-  quit: () => ipcRenderer.send('quit'),
   setCompact: (on, height) => ipcRenderer.send('set-compact', on, height),
   // Hotkey popup → main → main window.
   captureSubmit: (raw) => ipcRenderer.send('capture-submit', raw),
