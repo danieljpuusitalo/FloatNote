@@ -163,7 +163,7 @@ await tap('#btn-settings');
 await snap('settings-unpaired');
 check('phone: settings ask for the setup key', await P.ev(`document.getElementById('sync-pass').placeholder === 'Setup key' && document.getElementById('sync-save').textContent === 'Pair'`),
   await P.ev(`[document.getElementById('sync-pass').placeholder, document.getElementById('sync-save').textContent]`));
-check('phone: the sync line says nothing leaves the phone', /Nothing leaves this phone/.test(await P.ev(`document.getElementById('sync-status').textContent`)), await P.ev(`document.getElementById('sync-status').textContent`));
+check('phone: the sync line says nothing leaves the device', /Nothing leaves this device/.test(await P.ev(`document.getElementById('sync-status').textContent`)), await P.ev(`document.getElementById('sync-status').textContent`));
 check('phone: hotkey, login and keyboard sections hidden', await P.ev(`[...document.querySelectorAll('.desk-only')].every(e => getComputedStyle(e).display === 'none')`), null);
 check('phone: the settings box fits the screen', await P.ev(`(() => { const b = document.querySelector('#settings-overlay .settings-card').getBoundingClientRect(); return b.left >= 0 && b.right <= 390; })()`), null);
 await tap('#sync-pass');
@@ -171,7 +171,7 @@ await P.send('Input.insertText', { text: KEY });
 await tap('#sync-save');
 check('phone: pairs and syncs', await until(() => P.ev(`window.api.getInfo().then(i => i.sync.mode === 'on')`), 10000), await P.ev(`window.api.getInfo().then(i => i.sync)`));
 check('phone: receives the desktop items', await until(async () => (await P.ev(`Object.values(state.items).map(i => i.text).sort().join('|')`)) === TEXTS.join('|')), await P.ev(`Object.values(state.items).map(i => i.text)`));
-check('phone: settings now read paired, key box gone', await until(() => P.ev(`/Paired with/.test(document.getElementById('sync-note').textContent) && getComputedStyle(document.getElementById('sync-pass').parentElement).display === 'none' && document.getElementById('sync-off').textContent === 'Unpair this phone'`)),
+check('phone: settings now read paired, key box gone', await until(() => P.ev(`/Paired with/.test(document.getElementById('sync-note').textContent) && getComputedStyle(document.getElementById('sync-pass').parentElement).display === 'none' && document.getElementById('sync-off').textContent === 'Unpair this device'`)),
   await P.ev(`[document.getElementById('sync-note').textContent, document.getElementById('sync-off').textContent]`));
 check('phone: the key is not kept in storage', !(await P.ev(`new Promise(r => { const q = indexedDB.open('floatnote'); q.onsuccess = () => { const db = q.result; const st = db.transaction(db.objectStoreNames[0]).objectStore(db.objectStoreNames[0]); const all = st.getAll(); all.onsuccess = () => r(JSON.stringify(all.result).includes(${JSON.stringify(KEY)})); }; })`)), null);
 await snap('settings-paired');

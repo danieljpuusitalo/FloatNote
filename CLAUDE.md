@@ -38,6 +38,12 @@ byte-identical, and it checks the desktop page kept its hover and settings.
 Screenshots land in the scratch dir it prints. **Any change to `index.html` needs
 this run as well as a desktop look**: the same file is both UIs now.
 
+`node tools/check-browser.mjs` is the third shape of the same page: a computer's
+browser, 1440px wide, mouse. It checks the page is a centred column and that a click
+which ends an edit still lands (the due badge, a row button, another row's tick); its
+negative control is the pre-fix page, which loses all three clicks. Run it with
+`check-phone` after any change to `index.html`.
+
 `node tools/check-notes.mjs` drives the Notes editor's formatting (Ctrl+L,
 Ctrl+Shift+L, Ctrl+H, the right-click menu, the markdown shortcuts) in a real window
 on scratch data. Run it after any change to the Notes code.

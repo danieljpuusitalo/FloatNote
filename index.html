@@ -1028,6 +1028,19 @@
     :root.web .pick-overlay { padding: calc(14px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom)); }
     :root.web .toast { bottom: calc(14px + env(safe-area-inset-bottom)); }
     :root.web .onboarding-card { max-width: calc(100vw - 32px); }
+    /* A computer's browser: the app is a column the width of a roomy desktop
+       window, not a list stretched across the screen with its buttons a
+       screen away from the text. Overlays still dim the whole screen. */
+    @media (min-width: 760px) {
+      :root.web { background: #09090f; }
+      :root.web.paperwhite { background: #e6e2da; }
+      :root.web body {
+        width: 640px; margin: 0 auto; position: relative;
+        border-left: 1px solid var(--border-light); border-right: 1px solid var(--border-light);
+      }
+      :root.web { overflow: hidden; }   /* so the body clips its own glow */
+      :root.web body::before { position: absolute; }
+    }
     @media (hover: none) {
       .todo-item:hover:not(.sel) { background: none; border-color: transparent; }
       .todo-item:hover .todo-actions { display: none; }
@@ -2759,6 +2772,24 @@
       if (JSON.stringify(item) !== before) scheduleSave();
     }
 
+    // A press that ends an edit (the blur) must not rebuild the list under the
+    // pointer: the release would land on a removed element and the click, on the
+    // due badge or a row button, would be lost. So the rebuild waits for it.
+    let pressing = false;
+    addEventListener('pointerdown', () => { pressing = true; }, true);
+    addEventListener('pointerup', () => { pressing = false; }, true);
+    addEventListener('pointercancel', () => { pressing = false; }, true);
+    function afterPress(fn) {
+      if (!pressing) { setTimeout(fn); return; }
+      const done = () => {
+        removeEventListener('pointerup', done, true);
+        removeEventListener('pointercancel', done, true);
+        setTimeout(fn);   // after the click that follows the release
+      };
+      addEventListener('pointerup', done, true);
+      addEventListener('pointercancel', done, true);
+    }
+
     function startEdit(id, textEl) {
       const item = state.items[id];
       if (!item || editingId) return;
@@ -2771,14 +2802,18 @@
       input.focus();
       input.setSelectionRange(input.value.length, input.value.length);
       let finished = false;
-      const finish = (save) => {
+      const finish = (save, byPress) => {
         if (finished) return;
         finished = true;
         editingId = null;
         // Unchanged text is not re-read: that would re-parse words like
         // "fri" in it and touch an item nobody edited.
         if (save && input.value !== orig) applyEdit(id, input.value);
-        renderTodo();
+        if (!byPress) { renderTodo(); return; }
+        // Put the text back in place now; the full rebuild comes after the click.
+        textEl.textContent = state.items[id] ? state.items[id].text : input.value;
+        if (input.isConnected) input.replaceWith(textEl);
+        afterPress(renderTodo);
       };
       input.addEventListener('keydown', (e) => {
         e.stopPropagation();
@@ -2786,7 +2821,7 @@
         else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
       });
       // Switching to another window is not finishing: the edit stays open.
-      input.addEventListener('blur', () => { if (document.hasFocus()) finish(true); });
+      input.addEventListener('blur', () => { if (document.hasFocus()) finish(true, true); });
     }
 
     // One hidden date input, opened next to the badge that was clicked.
@@ -4050,7 +4085,7 @@
       if (s.mode === 'connecting') return ['', 'Connecting\u2026'];
       if (s.mode === 'offline') return ['', 'Offline. Changes are kept and sync when the connection is back.'];
       if (s.mode === 'error') return ['error', 'Not syncing: ' + (s.error || 'unknown error')];
-      return ['', i.web ? 'Not paired. Nothing leaves this phone.' : 'Off. Nothing leaves this computer.'];
+      return ['', i.web ? 'Not paired. Nothing leaves this device.' : 'Off. Nothing leaves this computer.'];
     }
 
     function renderSettings() {
@@ -4067,8 +4102,8 @@
         document.getElementById('sync-save').textContent = 'Pair';
         document.getElementById('sync-note').textContent = info.configured
           ? 'Paired with the FloatNote server.'
-          : 'The setup key is the one set on the FloatNote server. It is used once to pair this phone and is not kept.';
-        if (!syncOff.dataset.armed) syncOff.textContent = 'Unpair this phone';
+          : 'The setup key is the one set on the FloatNote server. It is used once to pair this device and is not kept.';
+        if (!syncOff.dataset.armed) syncOff.textContent = 'Unpair this device';
       } else {
         syncPass.placeholder = info.configured ? 'New passphrase, to switch' : 'Passphrase, at least 8 characters';
         document.getElementById('sync-save').textContent = info.configured ? 'Switch' : 'Connect';
@@ -4103,7 +4138,7 @@
       syncPass.value = '';
       syncMsg.textContent = '';
       delete syncOff.dataset.armed;
-      syncOff.textContent = info && info.web ? 'Unpair this phone' : 'Turn sync off';
+      syncOff.textContent = info && info.web ? 'Unpair this device' : 'Turn sync off';
     }
 
     async function setPassphrase(p) {
@@ -4133,7 +4168,7 @@
         return;
       }
       delete syncOff.dataset.armed;
-      syncOff.textContent = web ? 'Unpair this phone' : 'Turn sync off';
+      syncOff.textContent = web ? 'Unpair this device' : 'Turn sync off';
       await setPassphrase('');
     });
     document.getElementById('cap-seg').addEventListener('click', (e) => {

@@ -159,6 +159,16 @@ fails, the rest pass). Verified: `npm test` 148/148, `check-phone` 50/50,
 `phase3-phone` → `cleanup`, none merged to `master`. Merge when the real-phone test
 passes; nothing here reaches Daniel before a release.
 
+**Real-phone test (2026-10-18), on staging:** Daniel paired his iPhone and a Chrome tab
+on his PC; sync works both ways. His finding: Chrome on a computer "feels buggy". Fixed on
+`cleanup`: (1) the page stretched across the whole screen, buttons far from the text; it
+is now a 640px centred column in a wide browser; (2) **a click that ends an edit was
+lost** (the due badge, a row button, another row's tick): the blur rebuilt the list
+between press and release. This was in the Electron app too. The rebuild now waits for
+the release (`afterPress`). (3) Settings said "this phone" in any browser; now
+"this device". New `tools/check-browser.mjs` (12 checks; the pre-fix page fails 4).
+Verified: `npm test` 148/148, `check-phone` all passed, `check-notes` 17/17.
+
 **The direction is `docs/INTAKE.md`**: how to-dos flow in, and what earns a place.
 Read it before changing the pick, the drop folder or the skill.
 
@@ -213,8 +223,11 @@ Reality findings:
 
 ## Next
 
-1. Daniel tries staging on his real phone (Phase 3 above). Then Phases 4 to 6 of `bright-coalescing-pond.md`: decisions
-   relay, cutover (2.2.0), retire Firebase.
+1. Daniel re-tries Chrome on staging after the fixes and lists anything else rough.
+   Then land the branch chain, cutover (2.2.0: the desktop app joins the server), then
+   Phases 4 and 6 of `bright-coalescing-pond.md` (decisions relay, retire Firebase).
+   Daniel's goal, stated 2026-10-18: the installed desktop app stays primary and
+   syncs with Chrome and the phone through the server.
 2. Watch keep rate per source in the run reports; Awaiting-their-reply is 0 of 3
    so far.
 3. U12, U16, U18 and the reasoned sync items, when they bite.
