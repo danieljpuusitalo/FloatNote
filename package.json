@@ -1,6 +1,6 @@
 {
   "name": "floatnote",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Always-on-top to-do list: Today, Next, Waiting, Later, a morning pick, hotkey capture, sync, and a drop folder for Claude",
   "main": "main.js",
   "repository": {

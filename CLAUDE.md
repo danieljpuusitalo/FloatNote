@@ -50,7 +50,8 @@ server" in Settings and pairs. Then a second computer pairs, both ways are tried
 and the desktop unpairs and switches back. The server must hold exactly the desktop's
 records, deletes included. `--negative` loses the clock first and must fail the delete
 check. Pass a staging URL, with `FLOATNOTE_SETUP_KEY` set, to run it there; it
-tombstones its records and revokes its devices afterwards. Screenshots of the four
+tombstones its records and revokes its devices afterwards. `FLOATNOTE_EXE` points it
+at a packaged build (`dist/win-arm64-unpacked/FloatNote.exe`). Screenshots of the four
 Settings states land in the scratch dir it prints.
 
 `node tools/check-notes.mjs` drives the Notes editor's formatting (Ctrl+L,

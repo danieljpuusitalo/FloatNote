@@ -25,7 +25,9 @@ import { createRequire } from 'node:module';
 
 const repo = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const C = createRequire(import.meta.url)(join(repo, 'core.js'));
-const ELECTRON = join(repo, 'node_modules/electron/dist/electron.exe');
+// FLOATNOTE_EXE runs a packaged build instead (dist/win-arm64-unpacked/FloatNote.exe).
+const ELECTRON = process.env.FLOATNOTE_EXE || join(repo, 'node_modules/electron/dist/electron.exe');
+const APP = process.env.FLOATNOTE_EXE ? [] : [repo];
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const args = process.argv.slice(2);
 const NEGATIVE = args.includes('--negative');
@@ -121,7 +123,7 @@ const procs = [];
 async function launch(dir, port) {
   const env = { ...process.env, FLOATNOTE_DATA_DIR: dir };
   delete env.FLOATNOTE_SYNC;
-  const child = spawn(ELECTRON, [repo, '--remote-debugging-port=' + port], { env, stdio: 'ignore' });
+  const child = spawn(ELECTRON, [...APP, '--remote-debugging-port=' + port], { env, stdio: 'ignore' });
   procs.push(child);
   let page;
   for (let i = 0; i < 40 && !page; i++) { await sleep(500); try { page = (await (await fetch('http://127.0.0.1:' + port + '/json')).json()).find(t => t.type === 'page' && !t.url.includes('#capture')); } catch {} }

@@ -206,6 +206,25 @@ release as the rollback.
   open cutover devices on staging. 16 delete tombstones remain from the two runs.
   14 devices are unrevoked: Daniel's phone and Chrome, plus 12 stale test devices
   from earlier checks, left alone.
+- **Production Worker deployed (2026-10-18)**:
+  `https://floatnote.daniel-jpuusitalo.workers.dev`, the address the app
+  prefills. Its `SETUP_KEY` is in `~/.floatnote-setup-key`, outside every repo;
+  never print it. Smoke test: page 200, wrong key 403, no token 401, right key 201,
+  0 records, and the probe was revoked (its token then got 401).
+- **2.2.0 built, not released:** version bumped on `cutover`, and `npm run build`
+  produced both `FloatNote Setup 2.2.0-{x64,arm64}.exe`. `check-cutover` on the
+  packaged arm64 build (`FLOATNOTE_EXE=dist/win-arm64-unpacked/FloatNote.exe`):
+  all passed. Not merged to `master`, not tagged: that happens at release.
+
+**Release steps, with Daniel (stop-point):**
+1. Count his records (counts only), quit FloatNote, run the arm64 installer.
+2. The app reopens still on Firebase (his passphrase exists); counts compared.
+3. Settings > Sync > "FloatNote server", then paste the production setup key and
+   Pair. Server and desktop counts compared.
+4. Chrome and the phone open the production URL. It is a new origin, so it starts
+   empty and takes the desktop's copy. Pair with the production key, add it to
+   the home screen, and remove the staging one.
+5. Merge `cutover` to `master`, tag `v2.2.0`.
 
 **The direction is `docs/INTAKE.md`**: how to-dos flow in, and what earns a place.
 Read it before changing the pick, the drop folder or the skill.
