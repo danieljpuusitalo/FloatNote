@@ -479,3 +479,79 @@ test('negative control: without the retry firing, the refused edit never arrives
   await settle(S);
   assert.deepEqual(live(b.state), []);
 });
+
+// ---------- switching backend (2.2.0: Firebase to the FloatNote server) ----------
+
+// What main.setupSync does on a switch: stop, then a new sync on the new backend
+// over the same state, clock and lastSync.
+async function switchTo(S, d, root = 'server') {
+  d.sync.stop();
+  const moved = device(S, undefined, { state: d.state, clock: d.clock, lastSync: d.lastSync });
+  await moved.sync.start(root);
+  return moved;
+}
+
+async function syncedDesktop() {
+  const old = fakeServer(), a = device(old), phone = device(old);
+  await a.sync.start(PASS); await phone.sync.start(PASS);
+  const ids = [];
+  for (const t of ['Invented one', 'Invented two', 'Invented three', 'Invented four']) ids.push(await a.add(t));
+  await a.edit(s => { delete s.items[ids[1]]; });
+  await settle(old);
+  await phone.edit(s => { s.items[ids[2]].text = 'Invented three, edited on the phone'; });
+  await settle(old);
+  return { old, a, phone, ids };
+}
+
+const itemIds = s => Object.keys(s.items).sort();
+
+test('switching backend: the new server gets every record and every delete, nothing is lost or doubled', async () => {
+  const { a, phone, ids } = await syncedDesktop();
+  const before = synced(a.state);
+  const S = fakeServer();
+  const moved = await switchTo(S, a);
+  await settle(S);
+  assert.equal(synced(moved.state), before, 'the desktop is unchanged by the switch');
+  const remote = S.data['sync/server-v2'];
+  assert.equal(remote.items[ids[1]].d, true, 'the delete travels as a tombstone');
+  assert.equal(Object.values(remote.items).filter(w => !w.d).length, itemIds(a.state).length);
+  // A fresh browser pairs with the new server: the same list, the phone's edit included.
+  const browser = device(S);
+  await browser.sync.start('server');
+  await settle(S);
+  assert.deepEqual(itemIds(browser.state), itemIds(a.state));
+  assert.equal(browser.state.items[ids[2]].text, 'Invented three, edited on the phone');
+  assert.equal(synced(browser.state), synced(moved.state));
+  // And it keeps working both ways after the switch.
+  const late = await browser.add('Invented after the switch');
+  await moved.add('Invented on the desktop after the switch');
+  await settle(S);
+  assert.ok(moved.state.items[late]);
+  assert.equal(synced(browser.state), synced(moved.state));
+  assert.equal(itemIds(phone.state).length, 3, 'the old backend is left as it was');
+});
+
+test('switching back to the old backend picks up from where it left off', async () => {
+  const { old, a, phone } = await syncedDesktop();
+  const S = fakeServer();
+  const moved = await switchTo(S, a);
+  await settle(S);
+  const id = await moved.add('Invented while on the server');
+  await settle(S);
+  const back = await switchTo(old, moved, PASS);
+  await settle(old);
+  assert.ok(phone.state.items[id], 'what was added on the server reaches the old backend');
+  assert.equal(synced(phone.state), synced(back.state));
+});
+
+test('negative control: a switch that loses the clock pushes nothing, the delete included', async () => {
+  const { a, ids } = await syncedDesktop();
+  const S = fakeServer();
+  a.sync.stop();
+  const moved = device(S, undefined, { state: a.state, clock: {}, lastSync: null });
+  await moved.sync.start('server');
+  await settle(S);
+  const remote = S.data['sync/server-v2'] || {};
+  assert.equal((remote.items || {})[ids[1]], undefined, 'without the clock nothing knows the item was deleted');
+  assert.equal(Object.keys(remote.items || {}).length, 0, 'or that any record is newer than the empty server');
+});

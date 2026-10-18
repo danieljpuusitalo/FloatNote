@@ -1104,3 +1104,31 @@ test('negative control: same() notices a single diverged record', () => {
   b.state.habitLog['h_1:2026-10-01'] = true;
   assert.ok(!same(a, b));
 });
+
+// ---------- which sync backend ----------
+
+test('chooseBackend: env, then the saved choice, then paired, then a passphrase keeps Firebase, else the server', () => {
+  const pick = o => C.chooseBackend(Object.assign({ env: undefined, chosen: undefined, paired: false, passphrase: false }, o));
+  assert.equal(pick({}), 'server', 'a fresh install starts on the server');
+  assert.equal(pick({ passphrase: true }), 'firebase', 'an upgrade with a passphrase keeps syncing on Firebase');
+  assert.equal(pick({ passphrase: true, paired: true }), 'server');
+  assert.equal(pick({ passphrase: true, paired: true, chosen: 'firebase' }), 'firebase', 'the saved choice wins');
+  assert.equal(pick({ passphrase: true, chosen: 'server' }), 'server', 'chosen but not paired yet: still the server');
+  assert.equal(pick({ chosen: 'firebase', env: 'server' }), 'server', 'the env var wins for dev runs');
+  assert.equal(pick({ chosen: 'nonsense', passphrase: true }), 'firebase', 'an unknown saved value is ignored');
+  assert.equal(pick({ env: '1', paired: true }), 'server', 'an unknown env value is ignored');
+});
+
+test('serverUrl: https anywhere, http only to this machine, cleaned', () => {
+  assert.equal(C.serverUrl(' https://invented.example.dev/ '), 'https://invented.example.dev');
+  assert.equal(C.serverUrl('https://invented.example.dev/sub//'), 'https://invented.example.dev/sub');
+  assert.equal(C.serverUrl('http://127.0.0.1:8799'), 'http://127.0.0.1:8799');
+  assert.equal(C.serverUrl('http://localhost:8799/'), 'http://localhost:8799');
+  assert.equal(C.serverUrl('http://invented.example.dev'), null, 'plain http to another machine would send the token in clear');
+  assert.equal(C.serverUrl('invented.example.dev'), null);
+  assert.equal(C.serverUrl('https://user:pw@invented.example.dev'), null);
+  assert.equal(C.serverUrl('https://invented.example.dev/?x=1'), null);
+  assert.equal(C.serverUrl('javascript:alert(1)'), null);
+  assert.equal(C.serverUrl(''), null);
+  assert.equal(C.serverUrl(undefined), null);
+});

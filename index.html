@@ -680,6 +680,8 @@
       background: var(--bg-card); color: var(--text-secondary); font-family: inherit; font-size: 12px; cursor: pointer;
     }
     .seg button.on { border-color: var(--accent); background: var(--accent-glow); color: var(--text-primary); font-weight: 700; }
+    .seg.wide button { width: auto; flex: 1; padding: 0 8px; }
+    .seg.hidden { display: none; }
     .set-check { display: flex; align-items: center; gap: 8px; font-size: 12px; cursor: pointer; color: var(--text-secondary); }
     .settings-card .card-btn.hidden { display: none; }
     .theme-toggle.warn { color: var(--red); }
@@ -1213,7 +1215,11 @@
       </div>
       <div class="set-sec">
         <div class="set-label">Sync</div>
+        <div class="seg wide hidden" id="backend-seg"><button data-b="server">FloatNote server</button><button data-b="firebase">Firebase (old)</button></div>
         <div class="set-status" id="sync-status"></div>
+        <div class="set-row hidden" id="sync-url-row">
+          <input type="text" id="sync-url" autocomplete="off" spellcheck="false" placeholder="Server address, https://...">
+        </div>
         <div class="set-row">
           <input type="password" id="sync-pass" autocomplete="off" spellcheck="false">
           <button class="card-btn" id="sync-save">Connect</button>
@@ -4066,8 +4072,22 @@
     const syncPass = document.getElementById('sync-pass');
     const syncMsg = document.getElementById('sync-msg');
     const syncOff = document.getElementById('sync-off');
+    const syncUrl = document.getElementById('sync-url');
+    const syncSave = document.getElementById('sync-save');
+    const syncNote = document.getElementById('sync-note');
+    const FIREBASE_NOTE = syncNote.textContent;
     const hotkeyInput = document.getElementById('hotkey-input');
-    let info = null;             // from main: sync status, live hotkey; never the passphrase
+    let info = null;             // from main: sync status, live hotkey; never the passphrase or a token
+
+    // Which way this copy pairs: the browser with the server it came from, the
+    // desktop with a server address and the setup key, or Firebase (old).
+    function syncKind(i) {
+      return !i ? 'firebase' : i.web ? 'web' : i.backend === 'server' ? 'server' : 'firebase';
+    }
+    function offLabel(i) {
+      const k = syncKind(i);
+      return k === 'web' ? 'Unpair this device' : k === 'server' ? 'Unpair this computer' : 'Turn sync off';
+    }
 
     function settingsOpen() { return !settingsEl.classList.contains('hidden'); }
 
@@ -4095,19 +4115,29 @@
       st.className = 'set-status ' + cls;
       st.textContent = text;
       syncOff.classList.toggle('hidden', !info.configured);
-      if (info.web) {
-        // The browser pairs with the server's setup key; once paired there is nothing to type.
+      const kind = syncKind(info);
+      document.getElementById('backend-seg').classList.toggle('hidden', !!info.web);
+      document.querySelectorAll('#backend-seg button').forEach(b => b.classList.toggle('on', b.dataset.b === info.backend));
+      document.getElementById('sync-url-row').classList.toggle('hidden', kind !== 'server' || info.configured);
+      if (kind !== 'firebase') {
+        // The browser and the desktop pair with the server's setup key; once paired there is nothing to type.
         syncPass.parentElement.classList.toggle('hidden', info.configured);
         syncPass.placeholder = 'Setup key';
-        document.getElementById('sync-save').textContent = 'Pair';
-        document.getElementById('sync-note').textContent = info.configured
-          ? 'Paired with the FloatNote server.'
-          : 'The setup key is the one set on the FloatNote server. It is used once to pair this device and is not kept.';
-        if (!syncOff.dataset.armed) syncOff.textContent = 'Unpair this device';
+        if (!syncSave.disabled) syncSave.textContent = 'Pair';
+        if (kind === 'server' && document.activeElement !== syncUrl && !syncUrl.value) {
+          syncUrl.value = (info.server && info.server.url) || info.defaultServerUrl || '';
+        }
+        const where = kind === 'server' && info.server ? info.server.url.replace(/^https?:\/\//, '') : 'the FloatNote server';
+        syncNote.textContent = info.configured
+          ? 'Paired with ' + where + '.'
+          : 'The setup key is the one set on the FloatNote server. It is used once to pair this ' + (kind === 'web' ? 'device' : 'computer') + ' and is not kept.';
       } else {
+        syncPass.parentElement.classList.remove('hidden');
         syncPass.placeholder = info.configured ? 'New passphrase, to switch' : 'Passphrase, at least 8 characters';
-        document.getElementById('sync-save').textContent = info.configured ? 'Switch' : 'Connect';
+        syncSave.textContent = info.configured ? 'Switch' : 'Connect';
+        syncNote.textContent = FIREBASE_NOTE;
       }
+      if (!syncOff.dataset.armed) syncOff.textContent = offLabel(info);
       document.querySelectorAll('#cap-seg button').forEach(b => b.classList.toggle('on', Number(b.dataset.n) === todayCap()));
       const recording = document.activeElement === hotkeyInput;
       if (!recording) hotkeyInput.value = state.preferences.hotkey || FN.DEFAULT_PREFS.hotkey;
@@ -4136,9 +4166,10 @@
       if (document.activeElement === hotkeyInput) hotkeyInput.blur();
       settingsEl.classList.add('hidden');
       syncPass.value = '';
+      syncUrl.value = '';
       syncMsg.textContent = '';
       delete syncOff.dataset.armed;
-      syncOff.textContent = info && info.web ? 'Unpair this device' : 'Turn sync off';
+      syncOff.textContent = offLabel(info);
     }
 
     async function setPassphrase(p) {
@@ -4147,10 +4178,26 @@
       if (res.ok) syncPass.value = '';
       return res.ok;
     }
+    async function pairServer(key) {
+      syncSave.disabled = true;
+      syncSave.textContent = 'Pairing\u2026';
+      syncMsg.textContent = '';
+      try {
+        const res = await window.api.pairServer(syncUrl.value, key);
+        syncMsg.textContent = res.ok ? '' : res.error;
+        if (res.ok) { syncPass.value = ''; syncUrl.value = ''; }
+      } finally {
+        syncSave.disabled = false;
+        syncSave.textContent = 'Pair';
+        window.api.getInfo().then(i => { info = i; renderSettings(); renderGear(); });
+      }
+    }
     function connectSync() {
+      if (syncSave.disabled) return;
       const p = syncPass.value.trim();
-      if (!p) { syncMsg.textContent = info && info.web ? 'Type the setup key first.' : 'Type a passphrase first.'; return; }
-      setPassphrase(p);
+      const kind = syncKind(info);
+      if (!p) { syncMsg.textContent = kind === 'firebase' ? 'Type a passphrase first.' : 'Type the setup key first.'; return; }
+      if (kind === 'server') pairServer(p); else setPassphrase(p);
     }
 
     document.getElementById('btn-settings').addEventListener('click', () => settingsOpen() ? closeSettings() : openSettings());
@@ -4158,18 +4205,32 @@
     settingsEl.addEventListener('mousedown', (e) => { if (e.target === settingsEl) closeSettings(); });
     document.getElementById('sync-save').addEventListener('click', connectSync);
     syncPass.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); connectSync(); } });
+    syncUrl.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); if (syncPass.value.trim()) connectSync(); else syncPass.focus(); } });
     // Turning off forgets the passphrase, so it takes a second click.
     syncOff.addEventListener('click', async () => {
-      const web = info && info.web;
+      const kind = syncKind(info);
       if (!syncOff.dataset.armed) {
         syncOff.dataset.armed = '1';
-        syncOff.textContent = web ? 'Tap again: you will need the setup key to pair again'
+        syncOff.textContent = kind === 'web' ? 'Tap again: you will need the setup key to pair again'
+          : kind === 'server' ? 'Click again: you will need the setup key to pair again'
           : 'Click again: you will need the passphrase to turn it back on';
         return;
       }
       delete syncOff.dataset.armed;
-      syncOff.textContent = web ? 'Unpair this device' : 'Turn sync off';
-      await setPassphrase('');
+      syncOff.textContent = offLabel(info);
+      if (kind === 'server') await window.api.unpairServer(); else await setPassphrase('');
+    });
+    // The other backend's passphrase or token is kept, so switching needs nothing typed.
+    document.getElementById('backend-seg').addEventListener('click', async (e) => {
+      const b = e.target.dataset && e.target.dataset.b;
+      if (!b || !info || b === info.backend) return;
+      syncMsg.textContent = '';
+      syncPass.value = '';
+      delete syncOff.dataset.armed;
+      await window.api.setBackend(b);
+      info = await window.api.getInfo();
+      renderSettings();
+      renderGear();
     });
     document.getElementById('cap-seg').addEventListener('click', (e) => {
       const n = Number(e.target.dataset && e.target.dataset.n);

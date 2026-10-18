@@ -1000,6 +1000,32 @@
 
   const RECORD_KINDS = ['items', 'completions', 'notes', 'habits', 'habitLog', 'meta'];
 
+  // ---------- which sync backend (desktop) ----------
+
+  // The env var wins (dev runs), then what Settings saved. With nothing saved, a
+  // computer already paired with a server uses it, one with a Firebase
+  // passphrase keeps Firebase until it is paired (an upgrade must not stop it
+  // syncing), and a fresh one starts on the server.
+  function chooseBackend(o) {
+    const ok = b => b === 'server' || b === 'firebase';
+    if (ok(o.env)) return o.env;
+    if (ok(o.chosen)) return o.chosen;
+    if (o.paired) return 'server';
+    if (o.passphrase) return 'firebase';
+    return 'server';
+  }
+
+  // A server address as typed, cleaned to scheme + host (+ port + path, without a
+  // trailing slash), or null. https, or http only to this machine for dev runs.
+  function serverUrl(raw) {
+    let u;
+    try { u = new URL(String(raw || '').trim()); } catch (e) { return null; }
+    const local = u.hostname === '127.0.0.1' || u.hostname === 'localhost';
+    if (!(u.protocol === 'https:' || (u.protocol === 'http:' && local))) return null;
+    if (u.username || u.password || u.search || u.hash) return null;
+    return (u.origin + u.pathname).replace(/\/+$/, '');
+  }
+
   return {
     DAY_MS, LISTS, CTXS, STALE_DAYS, TRIAGE_THRESHOLD, DEFAULT_PREFS, RECORD_KINDS,
     dateStr, isDateStr, parseDateStr, daysBetween, addDays,
@@ -1015,6 +1041,7 @@
     emptyState, normalizeState, isV1, migrateV1, freshFromV1,
     toRecords, applyPath, applyPatch, recordHashes, applyPatchIfUnchanged, commitSave,
     planLoad, stamp, recoverClock, parseClockFile, clockFile, adoptRemoteWhenDormant, TOMBSTONE_DAYS, toWire, wireValue, applyRemote, localIsNewer, newerThanRemote, purgeTombstones,
-    encodeKey, decodeKey, pathToKey, keyToPath
+    encodeKey, decodeKey, pathToKey, keyToPath,
+    chooseBackend, serverUrl
   };
 });

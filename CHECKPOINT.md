@@ -169,6 +169,38 @@ the release (`afterPress`). (3) Settings said "this phone" in any browser; now
 "this device". New `tools/check-browser.mjs` (12 checks; the pre-fix page fails 4).
 Verified: `npm test` 148/148, `check-phone` all passed, `check-notes` 17/17.
 
+**Landed (2026-10-18):** the chain `phase2-server` → `phase3-phone` → `cleanup` is
+merged into `master` (`56bf3aa`, `--no-ff`), 148/148, pushed.
+
+**2.2.0, the cutover, is built on branch `cutover`, not released.** Settings > Sync
+gets a choice: "FloatNote server" or "Firebase (old)". Firebase stays for this one
+release as the rollback.
+- `core.chooseBackend`, in order: `FLOATNOTE_SYNC`, then the saved choice
+  (`floatnote-backend.json`), then a paired server, then an existing passphrase,
+  else the server. **Daniel's upgrade therefore stays on Firebase** until he pairs,
+  so there is no sync gap. A fresh install starts on the server. `core.serverUrl`
+  accepts https, or http only for localhost, with no credentials, query or hash.
+- `main.js`: IPC `set-backend`, `pair-server` (POSTs `/api/pair` with the setup key
+  and the computer's hostname, keeps `{url, token, id, name}` in
+  `floatnote-server.json`, never the key), `unpair-server` (deletes the file, then
+  revokes the device on the server). `setupSync` stops the old sync and starts
+  whichever backend is chosen. The clock is kept across a switch, so the first run
+  on the new backend pushes every record and every tombstone.
+- `index.html`: the two-way choice (hidden in a browser), a server address prefilled
+  with `https://floatnote.daniel-jpuusitalo.workers.dev`, "Pair" / "Unpair this
+  computer" (two clicks), and errors in words ("That setup key is not right.").
+- Verified: `npm test` 153/153 (new: `chooseBackend`, `serverUrl`, and three switch
+  scenarios in `sync.test.js`, including the negative control that a lost clock
+  pushes no deletes; mutating `newerThanRemote` to skip tombstones fails one).
+  **`tools/check-cutover.mjs`** on the local server: 29/29, real clicks on two
+  Electron windows; `--negative` fails exactly the delete check (0 of 8 reached
+  the server). `check-phone` all passed (51; one assertion moved from "the
+  passphrase box shows" to "the server/Firebase choice shows", because a paired
+  desktop now hides the key box, plus a new one that the phone has neither),
+  `check-browser` and `check-notes` all passed, `check-server-sync` both rounds.
+- **The production Worker `floatnote` does not exist yet** (wrangler 10007). It is
+  deployed, with its own `SETUP_KEY`, as part of the release.
+
 **The direction is `docs/INTAKE.md`**: how to-dos flow in, and what earns a place.
 Read it before changing the pick, the drop folder or the skill.
 
@@ -223,14 +255,18 @@ Reality findings:
 
 ## Next
 
-1. Daniel re-tries Chrome on staging after the fixes and lists anything else rough.
-   Then land the branch chain, cutover (2.2.0: the desktop app joins the server), then
-   Phases 4 and 6 of `bright-coalescing-pond.md` (decisions relay, retire Firebase).
-   Daniel's goal, stated 2026-10-18: the installed desktop app stays primary and
-   syncs with Chrome and the phone through the server.
-2. Watch keep rate per source in the run reports; Awaiting-their-reply is 0 of 3
+1. **2.2.0.** Rehearse `check-cutover` on staging (it cleans up after itself). Then
+   deploy the production Worker with a new `SETUP_KEY`, bump to 2.2.0, and run
+   `npm run build`. **Stop there:** Daniel installs it, the record counts are
+   compared before and after, he pairs the desktop in Settings, and then Chrome and
+   the phone are paired to production (they are on staging today). Daniel's goal,
+   stated 2026-10-18: the installed desktop app stays primary and syncs with Chrome
+   and the phone through the server.
+2. Phase 4 (decisions relay), then Phase 6 (retire Firebase, about two weeks after
+   a clean cutover, separate yes).
+3. Watch keep rate per source in the run reports; Awaiting-their-reply is 0 of 3
    so far.
-3. U12, U16, U18 and the reasoned sync items, when they bite.
+4. U12, U16, U18 and the reasoned sync items, when they bite.
 
 ## Open questions for Daniel
 

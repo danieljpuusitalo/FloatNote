@@ -44,6 +44,15 @@ which ends an edit still lands (the due badge, a row button, another row's tick)
 negative control is the pre-fix page, which loses all three clicks. Run it with
 `check-phone` after any change to `index.html`.
 
+`node tools/check-cutover.mjs` is the 2.2.0 switch as Daniel will do it: a desktop on
+Firebase with 40 invented to-dos, a synced clock and 8 deletes chooses "FloatNote
+server" in Settings and pairs. Then a second computer pairs, both ways are tried live,
+and the desktop unpairs and switches back. The server must hold exactly the desktop's
+records, deletes included. `--negative` loses the clock first and must fail the delete
+check. Pass a staging URL, with `FLOATNOTE_SETUP_KEY` set, to run it there; it
+tombstones its records and revokes its devices afterwards. Screenshots of the four
+Settings states land in the scratch dir it prints.
+
 `node tools/check-notes.mjs` drives the Notes editor's formatting (Ctrl+L,
 Ctrl+Shift+L, Ctrl+H, the right-click menu, the markdown shortcuts) in a real window
 on scratch data. Run it after any change to the Notes code.
@@ -111,8 +120,9 @@ features and the drop-folder format; version in `package.json`.
 - Data files in the data dir: `floatnote-data.json` (state, `schemaVersion: 2`),
   `floatnote-clock.json` (per-record sync timestamps and tombstones; deleting it
   makes every record look new), `floatnote-window.json`, `floatnote-sync.json`
-  (passphrase; never print it), `floatnote-server.json` (sync server url and
-  device token, read only with `FLOATNOTE_SYNC=server`; never print it), `backups/` (one per day, 14 kept), `inbox/`
+  (passphrase; never print it), `floatnote-server.json` (sync server url, device
+  id and token, written by Settings > Pair; never print it), `floatnote-backend.json`
+  (`{backend: 'server'|'firebase'}`, the Settings choice), `backups/` (one per day, 14 kept), `inbox/`
   (the drop folder, with `processed.log` and `rejected/`), `inbox-seen.json`
   (what was suggested before; deleting it lets old suggestions come back).
 - **The drop folder is read by main, which then edits state itself.** That is the
@@ -139,9 +149,15 @@ features and the drop-folder format; version in `package.json`.
   a throwaway passphrase, and delete its `sync/<pass>-v2` node afterwards. Sync
   races only show up there and only some runs, so repeat a pass before trusting it.
 - **The sync server (`server/`, logic in `server-core.js`) is replacing Firebase**
-  (plan `~/.claude/plans/bright-coalescing-pond.md`). Until the cutover release it
-  is opt-in for dev runs: `FLOATNOTE_SYNC=server` plus a device paired with
-  `tools/pair-device.mjs` (reads the setup key from `FLOATNOTE_SETUP_KEY`).
+  (plan `~/.claude/plans/bright-coalescing-pond.md`). From 2.2.0, Settings > Sync
+  chooses "FloatNote server" or "Firebase (old)" (`core.chooseBackend`): the
+  `FLOATNOTE_SYNC` env var wins, then the saved choice, then a paired server, then
+  an existing passphrase (so an upgrade stays on Firebase until Daniel pairs), and a
+  fresh install defaults to the server. Pairing takes the server address
+  (prefilled with the production Worker) and the setup key, which is used once and
+  not kept. Switching keeps `floatnote-clock.json`, which is what makes the first run
+  on the new backend push every record and tombstone. `tools/pair-device.mjs` still
+  pairs a scratch data dir from the shell for dev runs.
   `server/` has its own `package.json` so wrangler never enters the app's
   dependencies, and neither it nor `server-core.js` is in `build.files`.
   `wrangler dev` cannot run here (no workerd build for Windows on Arm): test

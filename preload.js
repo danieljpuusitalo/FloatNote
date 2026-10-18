@@ -23,5 +23,10 @@ contextBridge.exposeInMainWorld('api', {
   onInfo: (callback) => ipcRenderer.on('info', (_e, info) => callback(info)),
   logDecisions: (entries) => ipcRenderer.send('log-decisions', entries),
   setPassphrase: (p) => ipcRenderer.invoke('set-passphrase', p),
+  // Settings > Sync: the FloatNote server or Firebase. The setup key only goes in;
+  // the device token stays in main.
+  setBackend: (b) => ipcRenderer.invoke('set-backend', b),
+  pairServer: (url, key) => ipcRenderer.invoke('pair-server', url, key),
+  unpairServer: () => ipcRenderer.invoke('unpair-server'),
   pauseHotkey: (on) => ipcRenderer.send('pause-hotkey', on)
 });

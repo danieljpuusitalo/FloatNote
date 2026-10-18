@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, Tray, Menu, screen, shell, globalShortcut, powerMonitor } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const C = require('./core');
 const { createSync, firebaseBackend, httpBackend } = require('./sync');
 
@@ -18,11 +19,13 @@ const V1_BACKUP_PATH = path.join(DATA_DIR, 'floatnote-data.v1.json');
 const CLOCK_PATH = path.join(DATA_DIR, 'floatnote-clock.json');
 const WINDOW_PATH = path.join(DATA_DIR, 'floatnote-window.json');
 const SYNC_PATH = path.join(DATA_DIR, 'floatnote-sync.json');
-// FLOATNOTE_SYNC=server syncs with the FloatNote server (server/) instead of
-// Firebase, as the device paired by tools/pair-device.mjs. Dev runs only until
-// the cutover release. The file holds the device token: never print it.
-const SERVER_SYNC = process.env.FLOATNOTE_SYNC === 'server';
+// Sync goes to the FloatNote server (server/) or, until it is retired, Firebase.
+// Settings > Sync picks one (floatnote-backend.json); core.chooseBackend has the
+// rule when nothing was picked. FLOATNOTE_SYNC=server|firebase overrides it for
+// dev runs. floatnote-server.json holds the device token: never print it.
 const SERVER_PATH = path.join(DATA_DIR, 'floatnote-server.json');
+const BACKEND_PATH = path.join(DATA_DIR, 'floatnote-backend.json');
+const DEFAULT_SERVER_URL = 'https://floatnote.daniel-jpuusitalo.workers.dev';
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 const BACKUP_KEEP = 14;
 const SYNCED_WRITE_MS = 60 * 60 * 1000;
@@ -167,19 +170,39 @@ function send(channel, ...args) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, ...args);
 }
 
-// What the settings screen shows. Never includes the passphrase itself.
+function backend() {
+  const c = readJson(BACKEND_PATH);
+  return C.chooseBackend({
+    env: process.env.FLOATNOTE_SYNC,
+    chosen: c && c.backend,
+    paired: !!readServer(),
+    passphrase: !!readPassphrase()
+  });
+}
+
+// What the settings screen shows. Never the passphrase or the device token.
 function info() {
+  const b = backend();
+  const server = readServer();
   return {
     sync: sync ? sync.status() : { mode: 'off' },
-    configured: SERVER_SYNC ? !!readServer() : !!readPassphrase(),
+    backend: b,
+    configured: b === 'server' ? !!server : !!readPassphrase(),
+    server: server ? { url: server.url, name: server.name } : null,
+    defaultServerUrl: DEFAULT_SERVER_URL,
     hotkey,
     wantedHotkey,
     packaged: app.isPackaged
   };
 }
 
+// Sync runs against one backend at a time; changing it stops the old run and
+// starts a fresh one. The clock stays, so the first run on a new backend pushes
+// every record it lacks, deletes included, and takes anything newer it holds.
 function setupSync() {
-  const server = SERVER_SYNC ? readServer() : null;
+  if (sync) sync.stop();
+  const b = backend();
+  const server = b === 'server' ? readServer() : null;
   sync = createSync({
     backend: server ? httpBackend(server.url, server.token) : firebaseBackend(),
     clock,
@@ -201,10 +224,8 @@ function setupSync() {
     onStatus: () => send('info', info())
   });
   // The server backend ignores the root; any non-empty one turns sync on.
-  sync.start(SERVER_SYNC ? (server ? 'server' : '') : readPassphrase());
-  // A start that failed offline retries on its own; waking from sleep is the
-  // likeliest moment the network is back.
-  if (powerMonitor) powerMonitor.on('resume', () => sync.retryNow());
+  sync.start(b === 'server' ? (server ? 'server' : '') : readPassphrase());
+  send('info', info());
 }
 
 // Hand the renderer a change main made itself, the same way as a remote one:
@@ -528,6 +549,9 @@ if (!app.requestSingleInstanceLock()) {
     createCaptureWindow();
     registerHotkey(state.preferences.hotkey || C.DEFAULT_PREFS.hotkey);
     setupSync();
+    // A start that failed offline retries on its own; waking from sleep is the
+    // likeliest moment the network is back.
+    if (powerMonitor) powerMonitor.on('resume', () => sync.retryNow());
     watchInbox();
     // Anything that arrived while FloatNote was closed: wait for the window, so
     // the "Claude suggested" note has somewhere to show.
@@ -598,10 +622,65 @@ ipcMain.handle('set-passphrase', (_event, raw) => {
   if (p && p.length < 8) return { ok: false, error: 'Use at least 8 characters.' };
   if (/[.#$\[\]\/]/.test(p)) return { ok: false, error: 'The characters . # $ [ ] / are not allowed.' };
   writeJsonAtomic(SYNC_PATH, { passphrase: p });
-  if (sync && !SERVER_SYNC) sync.start(p);
+  if (backend() === 'firebase') setupSync();
   send('info', info());
   return { ok: true };
 });
+
+// Settings > Sync: which backend. The other one's passphrase or token is kept,
+// so switching back needs nothing typed.
+ipcMain.handle('set-backend', (_event, b) => {
+  if (b !== 'server' && b !== 'firebase') return { ok: false, error: 'Unknown sync choice.' };
+  writeJsonAtomic(BACKEND_PATH, { backend: b });
+  setupSync();
+  return { ok: true };
+});
+
+// Pair this computer with a FloatNote server, as the browser does: the setup
+// key goes to the server once and is not kept; the device token it returns is
+// written next to the passphrase file and never leaves main.
+ipcMain.handle('pair-server', async (_event, rawUrl, rawKey) => {
+  const url = C.serverUrl(rawUrl);
+  const key = typeof rawKey === 'string' ? rawKey.trim() : '';
+  if (!url) return { ok: false, error: 'That is not a server address (https://...).' };
+  if (!key) return { ok: false, error: 'Type the setup key first.' };
+  let res, body;
+  try {
+    res = await fetch(url + '/api/pair', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ setupKey: key, name: os.hostname() }),
+      signal: AbortSignal.timeout(15000)
+    });
+    body = await res.json().catch(() => ({}));
+  } catch (e) {
+    return { ok: false, error: 'No connection to ' + url + '. Check the address, or try again when online.' };
+  }
+  if (res.status === 403) return { ok: false, error: 'That setup key is not right.' };
+  if (res.status !== 201 || typeof body.token !== 'string') return { ok: false, error: 'Pairing failed: ' + (body.error || 'HTTP ' + res.status) };
+  revokeServer(readServer());
+  writeJsonAtomic(SERVER_PATH, { url, token: body.token, id: body.id, name: body.name });
+  writeJsonAtomic(BACKEND_PATH, { backend: 'server' });
+  setupSync();
+  return { ok: true };
+});
+
+// Forget this computer's token here and revoke it on the server. The state and
+// clock stay, so pairing again picks up where it left off.
+ipcMain.handle('unpair-server', () => {
+  const old = readServer();
+  try { fs.unlinkSync(SERVER_PATH); } catch (e) { /* not paired */ }
+  setupSync();
+  revokeServer(old);
+  return { ok: true };
+});
+
+function revokeServer(s) {
+  if (!s || !s.id) return;
+  fetch(s.url + '/api/devices/' + encodeURIComponent(s.id), {
+    method: 'DELETE', headers: { authorization: 'Bearer ' + s.token }, signal: AbortSignal.timeout(15000)
+  }).catch(() => { /* offline: the token is gone here, which is what matters */ });
+}
 
 ipcMain.on('pause-hotkey', (_e, on) => {
   hotkeyPaused = !!on;

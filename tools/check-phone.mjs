@@ -109,7 +109,7 @@ check('desktop: hovering a row shows its actions', await D.ev(`getComputedStyle(
 await D.ev(`openSettings()`);
 await sleep(200);
 check('desktop: settings keep the hotkey, login and keyboard sections', await D.ev(`[...document.querySelectorAll('.desk-only')].length >= 3 && [...document.querySelectorAll('.desk-only')].every(e => getComputedStyle(e).display !== 'none')`), null);
-check('desktop: sync passphrase box still shown', await D.ev(`getComputedStyle(document.getElementById('sync-pass').parentElement).display !== 'none'`), null);
+check('desktop: the server/Firebase choice shows, on the server', await D.ev(`getComputedStyle(document.getElementById('backend-seg')).display !== 'none' && !!document.querySelector('#backend-seg button.on[data-b="server"]')`), null);
 await D.ev(`closeSettings()`);
 const deskBefore = await records(D);
 
@@ -165,6 +165,7 @@ check('phone: settings ask for the setup key', await P.ev(`document.getElementBy
   await P.ev(`[document.getElementById('sync-pass').placeholder, document.getElementById('sync-save').textContent]`));
 check('phone: the sync line says nothing leaves the device', /Nothing leaves this device/.test(await P.ev(`document.getElementById('sync-status').textContent`)), await P.ev(`document.getElementById('sync-status').textContent`));
 check('phone: hotkey, login and keyboard sections hidden', await P.ev(`[...document.querySelectorAll('.desk-only')].every(e => getComputedStyle(e).display === 'none')`), null);
+check('phone: no server/Firebase choice and no address box', await P.ev(`['backend-seg', 'sync-url-row'].every(id => getComputedStyle(document.getElementById(id)).display === 'none')`), null);
 check('phone: the settings box fits the screen', await P.ev(`(() => { const b = document.querySelector('#settings-overlay .settings-card').getBoundingClientRect(); return b.left >= 0 && b.right <= 390; })()`), null);
 await tap('#sync-pass');
 await P.send('Input.insertText', { text: KEY });
