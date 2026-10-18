@@ -198,8 +198,14 @@ release as the rollback.
   passphrase box shows" to "the server/Firebase choice shows", because a paired
   desktop now hides the key box, plus a new one that the phone has neither),
   `check-browser` and `check-notes` all passed, `check-server-sync` both rounds.
-- **The production Worker `floatnote` does not exist yet** (wrangler 10007). It is
-  deployed, with its own `SETUP_KEY`, as part of the release.
+- **Rehearsed on staging (2026-10-18): `check-cutover` all passed**, 40 of 40
+  records and 8 of 8 deletes on the server, none doubled. On a real server the
+  check compares, ticks and tombstones only its own tagged to-dos. The fixture's
+  older notes lose to staging's newer ones, so it checks that both computers end on
+  the same notes. Afterwards a separate probe counted 0 live fixture to-dos and 0
+  open cutover devices on staging. 16 delete tombstones remain from the two runs.
+  14 devices are unrevoked: Daniel's phone and Chrome, plus 12 stale test devices
+  from earlier checks, left alone.
 
 **The direction is `docs/INTAKE.md`**: how to-dos flow in, and what earns a place.
 Read it before changing the pick, the drop folder or the skill.

@@ -7,7 +7,11 @@
 //   FLOATNOTE_SETUP_KEY=... node tools/check-cutover.mjs https://<staging>
 //
 // Against a real server it pairs three devices, revokes them at the end and
-// tombstones every invented record, so paired phones see the fixture come and go.
+// tombstones every invented to-do, so paired phones see the fixture come and go.
+// Only this run's records are compared, ticked or tombstoned: those with its tag.
+// The fixture's notes, preferences and habits are older than the server's, so
+// they lose and the server's copy stays; the one shared record the run does
+// change is meta/lastDay, set to today by the app's own launch.
 // The key is read from the environment and only ever typed into the window.
 // --negative deletes the desktop's clock file before the switch: the delete
 // check must then fail (a switch that loses the clock forgets what was deleted).
@@ -44,6 +48,11 @@ if (remote) {
   for (let i = 0; i < 60; i++) { await sleep(200); try { await fetch(URL_ + '/api/sync'); break; } catch {} }
 }
 
+const DAY = C.DAY_MS, now = Date.now(), T0 = now - 20 * DAY;
+const tag = randomBytes(3).toString('hex');
+// This run's records: to-dos whose text carries the tag, and the tagged deletes.
+const ours = (path, w) => path.startsWith('items/') && (path.includes(tag) || (!!w && !w.d && JSON.parse(w.j).text.includes(tag)));
+
 // A probe device reads what the server holds, the way a phone would.
 async function api(method, path, token, body) {
   const res = await fetch(URL_ + path, {
@@ -67,8 +76,6 @@ async function serverRecords() {
 }
 
 // ---------- the fixture: a desktop that has been syncing on Firebase ----------
-const DAY = C.DAY_MS, now = Date.now(), T0 = now - 20 * DAY;
-const tag = randomBytes(3).toString('hex');
 function fixture() {
   const s = C.emptyState();
   s.preferences = Object.assign(s.preferences, { name: 'Tester', onboarded: true });
@@ -168,7 +175,7 @@ const check = (name, ok, got) => { console.log((ok ? 'ok   ' : 'FAIL ') + name +
 const status = d => d.ev(`document.getElementById('sync-status').textContent`);
 const seg = d => d.ev(`[...document.querySelectorAll('#backend-seg button.on')].map(b => b.dataset.b).join()`);
 const visible = (d, sel) => d.ev(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); return !!e && !!e.offsetParent; })()`);
-const items = d => d.ev(`Object.values(state.items).map(i => i.id + '|' + i.text + '|' + i.list + '|' + (i.doneAt ? 'done' : '')).sort()`);
+const items = d => d.ev(`Object.values(state.items).filter(i => i.text.includes('${tag}')).map(i => i.id + '|' + i.text + '|' + i.list + '|' + (i.doneAt ? 'done' : '')).sort()`);
 
 try {
   // 1. The desktop as it is today: Firebase, everything local.
@@ -181,6 +188,7 @@ try {
   const beforeA = await items(A);
   // What the desktop holds as it switches (launch itself stamps meta/lastDay).
   const deskRecords = await A.ev('FN.toRecords(state)');
+  if (remote) for (const k of Object.keys(deskRecords)) if (!ours(k, { t: 0, j: JSON.stringify(deskRecords[k]) })) delete deskRecords[k];
   const LIVE = Object.keys(deskRecords).length;
   check('desktop holds the fixture', beforeA.length === 40, beforeA.length);
 
@@ -206,6 +214,7 @@ try {
 
   // 3. The server holds exactly the desktop's records, deletes included.
   let srvRecs = await serverRecords();
+  if (remote) srvRecs = Object.fromEntries(Object.entries(srvRecs).filter(([p, w]) => ours(p, w)));
   const liveOnServer = Object.entries(srvRecs).filter(([, w]) => !w.d);
   const tombsOnServer = Object.entries(srvRecs).filter(([, w]) => w.d);
   check('every record reached the server, no more (' + LIVE + ')', liveOnServer.length === LIVE, liveOnServer.length);
@@ -225,17 +234,21 @@ try {
   await B.click('#sync-save');
   check('the second computer pairs', await B.until(`/^On/.test(document.getElementById('sync-status').textContent)`, 20000), await status(B));
   mine.push(deviceId(dirB));
-  await B.until(`Object.keys(state.items).length >= 40`);
+  await B.until(`Object.values(state.items).filter(i => i.text.includes('${tag}')).length >= 40`);
   const gotB = await items(B);
   check('it holds the same 40 to-dos, none doubled, the done ones done', JSON.stringify(gotB) === JSON.stringify(afterA), gotB.length);
-  check('and the notes', (await B.ev(`state.notes.professional`)).includes('Invented note ' + tag), null);
+  // On a real server its own newer notes win over the fixture's; either way both
+  // computers end on the same copy. (Compared, never printed: they may be real.)
+  const notesOf = d => d.ev(`JSON.stringify(state.notes)`);
+  check('and the same notes on both', await B.until(`JSON.stringify(state.notes) === ${JSON.stringify(await notesOf(A))}`, 5000), null);
+  if (!remote) check('the desktop\'s notes, on the empty server', (await notesOf(B)).includes('Invented note ' + tag), null);
   await B.click('#settings-close');
   await A.click('#settings-close');
 
   // 5. Both ways, live.
   await B.ev(`(() => { const c = document.getElementById('capture-input'); c.focus(); c.value = 'Invented from the laptop ${tag}'; c.dispatchEvent(new Event('input', { bubbles: true })); c.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`);
   check('added on the laptop, on the desktop within seconds', await A.until(`Object.values(state.items).some(i => i.text === 'Invented from the laptop ${tag}')`, 10000), null);
-  const tickId = await A.ev(`todoRows().map(r => r.dataset.id).find(id => !state.items[id].doneAt)`);
+  const tickId = await A.ev(`todoRows().map(r => r.dataset.id).find(id => !state.items[id].doneAt && state.items[id].text.includes('${tag}'))`);
   await A.click(`.todo-item[data-id="${tickId}"] input[type="checkbox"]`);
   check('ticked on the desktop, done on the laptop', await B.until(`!!(state.items['${tickId}'] || {}).doneAt`, 10000), null);
 
@@ -262,7 +275,7 @@ try {
   await A2.click('#btn-settings');
   await sleep(300);
   check('after a restart it is still on Firebase (old)', await seg(A2) === 'firebase', await seg(A2));
-  check('and holds all 41 to-dos', (await A2.ev(`Object.keys(state.items).length`)) === 41, await A2.ev(`Object.keys(state.items).length`));
+  check('and holds all 41 to-dos', (await items(A2)).length === 41, (await items(A2)).length);
 
   check('no page exceptions', errsA.length + B.errs.length + A2.errs.length === 0, errsA.concat(B.errs, A2.errs));
 } catch (e) {
@@ -275,11 +288,11 @@ try {
       const left = await serverRecords();
       const t = Date.now();
       const writes = {};
-      for (const [p, w] of Object.entries(left)) if (!w.d) writes[C.pathToKey(p)] = { t, d: true };
+      for (const [p, w] of Object.entries(left)) if (!w.d && ours(p, w)) writes[C.pathToKey(p)] = { t, d: true };
       if (Object.keys(writes).length) await api('POST', '/api/sync', probe.token, { writes });
       // Only the devices this run paired; the probe last, since it does the revoking.
       for (const id of mine.concat(probe.id)) await api('DELETE', '/api/devices/' + id, probe.token);
-      console.log('cleaned up: ' + Object.keys(writes).length + ' invented records tombstoned, devices revoked');
+      console.log('cleaned up: ' + Object.keys(writes).length + ' invented to-dos tombstoned, ' + (mine.length + 1) + ' devices revoked');
     } catch (e) { console.log('cleanup failed: ' + e.message); }
   }
   for (const p of procs) { try { p.kill(); } catch {} }
