@@ -251,10 +251,11 @@ test('triage card appears at 5 stale items, not 4', () => {
   const items = [];
   for (let n = 0; n < 4; n++) items.push(C.makeItem({ id: 's' + n, text: 's' + n }, T - 20 * DAY));
   const s = stateWith(items);
-  assert.ok(!C.needsTriage(s, T));
+  assert.equal(C.staleItems(s, T).length, 4);
+  assert.ok(4 < C.TRIAGE_THRESHOLD);
   s.items.s4 = C.makeItem({ id: 's4', text: 's4' }, T - 20 * DAY);
-  assert.ok(C.needsTriage(s, T));
   assert.equal(C.staleItems(s, T).length, 5);
+  assert.ok(5 >= C.TRIAGE_THRESHOLD);
 });
 
 test('moving out of Today resets carriedDays', () => {
@@ -326,9 +327,12 @@ test('needsPick follows meta.lastPick', () => {
 
 // ---------- suggestions ----------
 
+// The suggestions alone, with nothing remembered between calls.
+const ingestSuggestions = (state, payload, now) => C.ingestInbox(state, payload, now, {}).added;
+
 test('suggestions: valid entries land as suggested, junk is skipped', () => {
   const s = stateWith([C.makeItem({ id: 'e', text: 'Already here' }, T)]);
-  const added = C.ingestSuggestions(s, [
+  const added = ingestSuggestions(s, [
     { text: 'Send Q3 numbers to Dana', who: 'Dana', due: '2026-10-05', ctx: 'work', list: 'next',
       source: { url: 'https://mail.example.com/thread/1', label: 'Re: Q3' } },
     { text: 'Chase signed SAFE', list: 'waiting', source: { url: 'javascript:alert(1)' } },
@@ -352,7 +356,7 @@ test('suggestions: valid entries land as suggested, junk is skipped', () => {
 
 test('suggestions: accepts { items: [...] } too', () => {
   const s = C.emptyState();
-  assert.equal(C.ingestSuggestions(s, { items: [{ text: 'a' }] }, T).length, 1);
+  assert.equal(ingestSuggestions(s, { items: [{ text: 'a' }] }, T).length, 1);
 });
 
 test('inbox: a second sweep of the same mail does not bring back a kept or dropped suggestion', () => {

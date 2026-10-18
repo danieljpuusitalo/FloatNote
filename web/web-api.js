@@ -299,7 +299,6 @@
     logDecisions: noop,
     minimize: noop,
     close: noop,
-    quit: noop,
     setCompact: noop,
     captureSubmit: noop,
     captureHide: noop,

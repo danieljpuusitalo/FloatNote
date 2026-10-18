@@ -858,14 +858,6 @@
       background: linear-gradient(135deg, var(--accent), #d4a8ff);
       -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     }
-    .habit-stat-value.green-val {
-      background: linear-gradient(135deg, var(--green), #9ae8c0);
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-    }
-    .habit-stat-value.blue-val {
-      background: linear-gradient(135deg, var(--blue), #82b5f7);
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-    }
     .habit-stat-label {
       font-size: 9px; color: var(--text-muted); margin-top: 2px;
       text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500;
@@ -917,11 +909,6 @@
       background: rgba(180, 142, 255, 0.1); color: var(--accent);
       border: 1px solid rgba(180, 142, 255, 0.2);
     }
-    .habit-manage-date {
-      font-size: 9.5px; color: var(--text-muted); opacity: 0;
-      transition: opacity 0.15s; white-space: nowrap; flex-shrink: 0;
-    }
-    .habit-manage-item:hover .habit-manage-date { opacity: 0.65; }
     .habit-manage-btn {
       background: none; border: none; color: var(--text-muted); cursor: pointer;
       font-size: 13px; padding: 0 3px; opacity: 0; transition: opacity 0.15s, color 0.15s;
@@ -1405,14 +1392,6 @@
       return window.api.saveData(state, remoteSeq);
     }
 
-    function toDateStr(d) {
-      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-    }
-
-    function todayStr() {
-      return toDateStr(new Date());
-    }
-
     function onboardingShown() { return !document.getElementById('onboarding').classList.contains('hidden'); }
 
     function escapeHtml(str) {
@@ -1533,6 +1512,96 @@
       }
     });
 
+    // --- Notes: block helpers, shared by the keys, the markdown shortcuts and the context menu ---
+    const NOTE_HEADINGS = ['note-heading', 'note-title', 'note-subheading'];
+
+    // The direct child of the editor that holds node n, or null.
+    function noteBlock(editor, n) {
+      let b = n.nodeType === Node.TEXT_NODE ? n.parentElement : n;
+      while (b && b !== editor && b.parentElement !== editor) b = b.parentElement;
+      return (b && b !== editor) ? b : null;
+    }
+
+    function plainLine(text) {
+      const el = document.createElement('div');
+      el.textContent = text || '';
+      if (!el.textContent) el.innerHTML = '<br>';
+      return el;
+    }
+
+    // A heading line with its delete button.
+    function createHeadingEl(className, text) {
+      const el = document.createElement('div');
+      el.className = className;
+      el.textContent = text || '';
+      if (!text) el.innerHTML = '<br>';
+      const del = document.createElement('span');
+      del.className = 'section-delete';
+      del.textContent = '\u00d7';
+      del.setAttribute('contenteditable', 'false');
+      el.appendChild(del);
+      return el;
+    }
+
+    // A checklist line; its text span is the last child.
+    function createChecklistEl(text) {
+      const cl = document.createElement('div');
+      cl.className = 'note-checklist';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.className = 'check-box';
+      cb.setAttribute('contenteditable', 'false');
+      const span = document.createElement('span');
+      span.className = 'check-text';
+      span.setAttribute('contenteditable', 'true');
+      span.textContent = text || '';
+      if (!text) span.innerHTML = '<br>';
+      cl.appendChild(cb); cl.appendChild(span);
+      return cl;
+    }
+
+    // Ctrl+L and the menu's Bullet: every selected line becomes a bullet, or back
+    // to plain when all of them already are. Headings are left alone.
+    function toggleBullets(editor, sel) {
+      const range = sel.getRangeAt(0);
+      const startBlock = noteBlock(editor, range.startContainer);
+      const endBlock = noteBlock(editor, range.endContainer);
+      const blocks = [];
+      for (let cur = startBlock; cur; cur = cur.nextElementSibling) {
+        blocks.push(cur);
+        if (cur === endBlock) break;
+      }
+      if (!blocks.length) { const b = noteBlock(editor, sel.anchorNode); if (b) blocks.push(b); }
+      const allBullets = blocks.every(b => b.classList.contains('note-bullet'));
+      blocks.forEach(block => {
+        if (allBullets) block.replaceWith(plainLine(block.textContent));
+        else if (block.tagName === 'DIV' && !block.classList.contains('note-bullet') &&
+                 !NOTE_HEADINGS.some(h => block.classList.contains(h))) block.className = 'note-bullet';
+      });
+    }
+
+    // Ctrl+Shift+L and the menu's Checklist: the current line becomes a checklist
+    // item, or back to plain text. Headings are left alone.
+    function toggleChecklist(editor, sel) {
+      const block = noteBlock(editor, sel.anchorNode);
+      if (!block || block.tagName !== 'DIV') return;
+      let caret;
+      if (block.classList.contains('note-checklist')) {
+        const textSpan = block.querySelector('.check-text');
+        caret = plainLine((textSpan || block).textContent);
+        block.replaceWith(caret);
+      } else {
+        if (NOTE_HEADINGS.some(h => block.classList.contains(h))) return;
+        const cl = createChecklistEl(block.textContent);
+        block.replaceWith(cl);
+        caret = cl.lastChild;
+      }
+      const r = document.createRange();
+      r.selectNodeContents(caret);
+      r.collapse(false);
+      sel.removeAllRanges();
+      sel.addRange(r);
+    }
+
     document.getElementById('notes-editor').addEventListener('input', (e) => {
       const editor = e.target;
       const sel = window.getSelection();
@@ -1578,42 +1647,21 @@
             // Auto-detect "### " → subheading (check longest first)
             else if (fullText.startsWith('### ') || fullText.startsWith('###\u00a0')) {
               const rest = fullText.slice(4);
-              const el = document.createElement('div');
-              el.className = 'note-subheading';
-              el.textContent = rest || '';
-              if (!rest) el.innerHTML = '<br>';
-              const del = document.createElement('span');
-              del.className = 'section-delete'; del.textContent = '\u00d7';
-              del.setAttribute('contenteditable', 'false');
-              el.appendChild(del);
+              const el = createHeadingEl('note-subheading', rest);
               replaceWith(el);
               placeCursor(el, !!rest);
             }
             // Auto-detect "## " → heading
             else if (fullText.startsWith('## ') || fullText.startsWith('##\u00a0')) {
               const rest = fullText.slice(3);
-              const el = document.createElement('div');
-              el.className = 'note-heading';
-              el.textContent = rest || '';
-              if (!rest) el.innerHTML = '<br>';
-              const del = document.createElement('span');
-              del.className = 'section-delete'; del.textContent = '\u00d7';
-              del.setAttribute('contenteditable', 'false');
-              el.appendChild(del);
+              const el = createHeadingEl('note-heading', rest);
               replaceWith(el);
               placeCursor(el, !!rest);
             }
             // Auto-detect "# " → title
             else if (fullText.startsWith('# ') || fullText.startsWith('#\u00a0')) {
               const rest = fullText.slice(2);
-              const el = document.createElement('div');
-              el.className = 'note-title';
-              el.textContent = rest || '';
-              if (!rest) el.innerHTML = '<br>';
-              const del = document.createElement('span');
-              del.className = 'section-delete'; del.textContent = '\u00d7';
-              del.setAttribute('contenteditable', 'false');
-              el.appendChild(del);
+              const el = createHeadingEl('note-title', rest);
               replaceWith(el);
               placeCursor(el, !!rest);
             }
@@ -1634,17 +1682,8 @@
                      fullText.startsWith('[ ] ') || fullText.startsWith('[ ]\u00a0')) {
               const sliceLen = fullText.startsWith('[ ]') ? 4 : 3;
               const rest = fullText.slice(sliceLen);
-              const cl = document.createElement('div');
-              cl.className = 'note-checklist';
-              const cb = document.createElement('input');
-              cb.type = 'checkbox'; cb.className = 'check-box';
-              cb.setAttribute('contenteditable', 'false');
-              const span = document.createElement('span');
-              span.className = 'check-text';
-              span.setAttribute('contenteditable', 'true');
-              span.textContent = rest || '';
-              if (!rest) span.innerHTML = '<br>';
-              cl.appendChild(cb); cl.appendChild(span);
+              const cl = createChecklistEl(rest);
+              const span = cl.lastChild;
               replaceWith(cl);
               const r = document.createRange();
               if (rest) { r.setStart(span.firstChild, rest.length); }
@@ -1761,14 +1800,7 @@
         if (!selectedText) return;
 
         range.deleteContents();
-        const heading = document.createElement('div');
-        heading.className = 'note-heading';
-        heading.textContent = selectedText;
-        const del = document.createElement('span');
-        del.className = 'section-delete';
-        del.textContent = '\u00d7';
-        del.setAttribute('contenteditable', 'false');
-        heading.appendChild(del);
+        const heading = createHeadingEl('note-heading', selectedText);
         range.insertNode(heading);
 
         const r = document.createRange();
@@ -1787,51 +1819,7 @@
         e.preventDefault();
         const sel = window.getSelection();
         if (!sel.rangeCount) return;
-        const node = sel.anchorNode;
-        let block = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
-        while (block && block !== editor && block.parentElement !== editor) {
-          block = block.parentElement;
-        }
-        // If inside a check-text span, go up to note-checklist
-        if (block && block.classList && block.classList.contains('check-text')) {
-          block = block.parentElement;
-        }
-
-        if (block && block.classList && block.classList.contains('note-checklist')) {
-          // Unwrap checklist to plain div
-          const textSpan = block.querySelector('.check-text');
-          const plain = document.createElement('div');
-          plain.textContent = (textSpan ? textSpan.textContent : block.textContent) || '';
-          if (!plain.textContent) plain.innerHTML = '<br>';
-          block.replaceWith(plain);
-          const r = document.createRange();
-          r.selectNodeContents(plain);
-          r.collapse(false);
-          sel.removeAllRanges();
-          sel.addRange(r);
-        } else if (block && block !== editor && block.tagName === 'DIV') {
-          // Convert to checklist
-          const text = block.textContent || '';
-          const cl = document.createElement('div');
-          cl.className = 'note-checklist';
-          const cb = document.createElement('input');
-          cb.type = 'checkbox';
-          cb.className = 'check-box';
-          cb.setAttribute('contenteditable', 'false');
-          const span = document.createElement('span');
-          span.className = 'check-text';
-          span.setAttribute('contenteditable', 'true');
-          span.textContent = text;
-          if (!text) span.innerHTML = '<br>';
-          cl.appendChild(cb);
-          cl.appendChild(span);
-          block.replaceWith(cl);
-          const r = document.createRange();
-          r.selectNodeContents(span);
-          r.collapse(false);
-          sel.removeAllRanges();
-          sel.addRange(r);
-        }
+        toggleChecklist(editor, sel);
         state.notes[activeNotesCategory] = editor.innerHTML;
         scheduleSave();
         return;
@@ -1842,59 +1830,7 @@
         e.preventDefault();
         const sel = window.getSelection();
         if (!sel.rangeCount) return;
-
-        // Helper: find direct-child block of editor for a given node
-        function findBlock(n) {
-          let b = n.nodeType === Node.TEXT_NODE ? n.parentElement : n;
-          while (b && b !== editor && b.parentElement !== editor) b = b.parentElement;
-          return (b && b !== editor) ? b : null;
-        }
-
-        // Collect all direct-child blocks in the selection range
-        const range = sel.getRangeAt(0);
-        const startBlock = findBlock(range.startContainer);
-        const endBlock = findBlock(range.endContainer);
-
-        const blocks = [];
-        if (startBlock) {
-          let cur = startBlock;
-          while (cur) {
-            if (cur.nodeType === Node.ELEMENT_NODE && cur.parentElement === editor) {
-              blocks.push(cur);
-            }
-            if (cur === endBlock) break;
-            cur = cur.nextElementSibling;
-          }
-        }
-
-        // If no blocks found, fall back to single-block from anchor
-        if (!blocks.length) {
-          const b = findBlock(sel.anchorNode);
-          if (b) blocks.push(b);
-        }
-
-        if (!blocks.length) return;
-
-        // Determine toggle direction: if ALL are bullets, unbullet; otherwise bullet all
-        const allBullets = blocks.every(b => b.classList && b.classList.contains('note-bullet'));
-        const headingTypes = ['note-heading', 'note-title', 'note-subheading'];
-
-        blocks.forEach(block => {
-          if (allBullets) {
-            // Unwrap bullet to plain div
-            const plain = document.createElement('div');
-            plain.textContent = block.textContent || '';
-            if (!plain.textContent) plain.innerHTML = '<br>';
-            block.replaceWith(plain);
-          } else if (!block.classList.contains('note-bullet')) {
-            // Convert to bullet (skip headings)
-            const isHeading = headingTypes.some(h => block.classList.contains(h));
-            if (!isHeading && block.tagName === 'DIV') {
-              block.className = 'note-bullet';
-            }
-          }
-        });
-
+        toggleBullets(editor, sel);
         state.notes[activeNotesCategory] = editor.innerHTML;
         scheduleSave();
         return;
@@ -2177,16 +2113,8 @@
             r.setStart(plain, 0); r.collapse(true);
             sel.removeAllRanges(); sel.addRange(r);
           } else {
-            const cl = document.createElement('div');
-            cl.className = 'note-checklist';
-            const cb = document.createElement('input');
-            cb.type = 'checkbox'; cb.className = 'check-box';
-            cb.setAttribute('contenteditable', 'false');
-            const span = document.createElement('span');
-            span.className = 'check-text';
-            span.setAttribute('contenteditable', 'true');
-            span.innerHTML = '<br>';
-            cl.appendChild(cb); cl.appendChild(span);
+            const cl = createChecklistEl('');
+            const span = cl.lastChild;
             const indent = listItem.getAttribute('data-indent');
             if (indent && indent !== '0') { cl.setAttribute('data-indent', indent); cl.classList.add('indent-' + indent); }
             listItem.after(cl);
@@ -2264,27 +2192,6 @@
         });
       });
 
-      // Helper: find direct-child block of editor for a given node
-      function findEditorBlock(n) {
-        let b = n.nodeType === Node.TEXT_NODE ? n.parentElement : n;
-        while (b && b !== notesEditor && b.parentElement !== notesEditor) b = b.parentElement;
-        return (b && b !== notesEditor) ? b : null;
-      }
-
-      // Helper: create heading element with delete button
-      function createHeadingEl(className, text) {
-        const el = document.createElement('div');
-        el.className = className;
-        el.textContent = text || '';
-        if (!text) el.innerHTML = '<br>';
-        const del = document.createElement('span');
-        del.className = 'section-delete';
-        del.textContent = '\u00d7';
-        del.setAttribute('contenteditable', 'false');
-        el.appendChild(del);
-        return el;
-      }
-
       ctxMenu.addEventListener('mousedown', (e) => {
         // Prevent blur that would lose selection
         e.preventDefault();
@@ -2332,41 +2239,12 @@
             }
             break;
           }
-          case 'bullet': {
-            // Reuse the same logic as Ctrl+L
-            if (!sel.rangeCount) break;
-            const range = sel.getRangeAt(0);
-            const startBlock = findEditorBlock(range.startContainer);
-            const endBlock = findEditorBlock(range.endContainer);
-            const blocks = [];
-            if (startBlock) {
-              let cur = startBlock;
-              while (cur) {
-                if (cur.nodeType === Node.ELEMENT_NODE && cur.parentElement === notesEditor) blocks.push(cur);
-                if (cur === endBlock) break;
-                cur = cur.nextElementSibling;
-              }
-            }
-            if (!blocks.length) { const b = findEditorBlock(sel.anchorNode); if (b) blocks.push(b); }
-            if (!blocks.length) break;
-            const allBullets = blocks.every(b => b.classList && b.classList.contains('note-bullet'));
-            const headingTypes = ['note-heading', 'note-title', 'note-subheading'];
-            blocks.forEach(block => {
-              if (allBullets) {
-                const plain = document.createElement('div');
-                plain.textContent = block.textContent || '';
-                if (!plain.textContent) plain.innerHTML = '<br>';
-                block.replaceWith(plain);
-              } else if (!block.classList.contains('note-bullet')) {
-                const isHeading = headingTypes.some(h => block.classList.contains(h));
-                if (!isHeading && block.tagName === 'DIV') block.className = 'note-bullet';
-              }
-            });
+          case 'bullet':
+            if (sel.rangeCount) toggleBullets(notesEditor, sel);
             break;
-          }
           case 'numbered': {
             if (!sel.rangeCount) break;
-            const block = findEditorBlock(sel.anchorNode);
+            const block = noteBlock(notesEditor, sel.anchorNode);
             if (!block || block.tagName !== 'DIV') break;
             if (block.classList.contains('note-numbered')) {
               // Unwrap
@@ -2375,8 +2253,7 @@
               if (!plain.textContent) plain.innerHTML = '<br>';
               block.replaceWith(plain);
             } else {
-              const headingTypes = ['note-heading', 'note-title', 'note-subheading'];
-              if (headingTypes.some(h => block.classList.contains(h))) break;
+              if (NOTE_HEADINGS.some(h => block.classList.contains(h))) break;
               // Find previous numbered sibling to get next number
               let num = 1;
               const prev = block.previousElementSibling;
@@ -2388,42 +2265,14 @@
             }
             break;
           }
-          case 'checklist': {
-            if (!sel.rangeCount) break;
-            let block = findEditorBlock(sel.anchorNode);
-            // Handle check-text span case
-            if (block && block.classList && block.classList.contains('check-text')) block = block.parentElement;
-            if (!block || block.tagName !== 'DIV') break;
-            if (block.classList.contains('note-checklist')) {
-              const textSpan = block.querySelector('.check-text');
-              const plain = document.createElement('div');
-              plain.textContent = (textSpan ? textSpan.textContent : block.textContent) || '';
-              if (!plain.textContent) plain.innerHTML = '<br>';
-              block.replaceWith(plain);
-            } else {
-              const headingTypes = ['note-heading', 'note-title', 'note-subheading'];
-              if (headingTypes.some(h => block.classList.contains(h))) break;
-              const text = block.textContent || '';
-              const cl = document.createElement('div');
-              cl.className = 'note-checklist';
-              const cb = document.createElement('input');
-              cb.type = 'checkbox'; cb.className = 'check-box';
-              cb.setAttribute('contenteditable', 'false');
-              const span = document.createElement('span');
-              span.className = 'check-text';
-              span.setAttribute('contenteditable', 'true');
-              span.textContent = text;
-              if (!text) span.innerHTML = '<br>';
-              cl.appendChild(cb); cl.appendChild(span);
-              block.replaceWith(cl);
-            }
+          case 'checklist':
+            if (sel.rangeCount) toggleChecklist(notesEditor, sel);
             break;
-          }
           case 'heading':
           case 'title':
           case 'subheading': {
             if (!sel.rangeCount) break;
-            const block = findEditorBlock(sel.anchorNode);
+            const block = noteBlock(notesEditor, sel.anchorNode);
             if (!block || block.tagName !== 'DIV') break;
             const classMap = { heading: 'note-heading', title: 'note-title', subheading: 'note-subheading' };
             const targetClass = classMap[action];
@@ -3483,7 +3332,7 @@
       for (let i = 0; i < 7; i++) {
         const d = new Date(monday);
         d.setDate(monday.getDate() + i);
-        days.push(toDateStr(d));
+        days.push(FN.dateStr(d));
       }
       return days;
     }
@@ -3548,7 +3397,7 @@
       let streak = 0;
       const d = new Date();
       for (let i = 0; i < 365; i++) {
-        const ds = toDateStr(d);
+        const ds = FN.dateStr(d);
         const dow = d.getDay();
         const dayOfWeek = dow === 0 ? 6 : dow - 1;
         let anyScheduled = false, allDone = true;
@@ -3572,7 +3421,7 @@
 
     function isTodayAllComplete() {
       const active = (state.habits || []).filter(h => !h.archived);
-      const today = todayStr();
+      const today = FN.dateStr(Date.now());
       const dow = new Date().getDay();
       const dayOfWeek = dow === 0 ? 6 : dow - 1;
       for (const h of active) {
@@ -3617,7 +3466,7 @@
       const heatMondayOff = heatDow === 0 ? -6 : 1 - heatDow;
       const heatStart = new Date(heatEnd);
       heatStart.setDate(heatEnd.getDate() + heatMondayOff - 21);
-      for (let i = 0; i < 28; i++) { const _hd = new Date(heatStart); _hd.setDate(heatStart.getDate() + i); heatDays.push(toDateStr(_hd)); }
+      for (let i = 0; i < 28; i++) { const _hd = new Date(heatStart); _hd.setDate(heatStart.getDate() + i); heatDays.push(FN.dateStr(_hd)); }
       heatDays.forEach(dateStr => {
         const dd = new Date(dateStr + 'T00:00:00');
         const dow = dd.getDay();
@@ -3644,7 +3493,7 @@
       let streak = 0;
       const d = new Date();
       for (let i = 0; i < 365; i++) {
-        const dateStr = toDateStr(d);
+        const dateStr = FN.dateStr(d);
         const dow = d.getDay();
         const dayOfWeek = dow === 0 ? 6 : dow - 1; // convert to 0=Mon
         if (isHabitScheduled(habit, dayOfWeek)) {
@@ -3663,7 +3512,7 @@
 
     function getWeeklyCompletion(habitId, weekDays) {
       const habit = state.habits.find(h => h.id === habitId);
-      if (!habit) return { completed: 0, scheduled: 0, percent: 0 };
+      if (!habit) return { completed: 0, scheduled: 0 };
       const effectiveSched = getEffectiveSchedule(habit, weekDays);
       let completed = 0, scheduled = 0;
       weekDays.forEach((dateStr, i) => {
@@ -3672,14 +3521,14 @@
           if (state.habitLog[habitId + ':' + dateStr]) completed++;
         }
       });
-      return { completed, scheduled, percent: scheduled > 0 ? Math.round((completed / scheduled) * 100) : 0 };
+      return { completed, scheduled };
     }
 
     function getAvgWeeklyCompletion(habitId) {
       const habit = state.habits.find(h => h.id === habitId);
       if (!habit) return 0;
       // Walk back week by week from current week to creation week
-      const createdAt = new Date((habit.createdAt || todayStr()) + 'T00:00:00');
+      const createdAt = new Date((habit.createdAt || FN.dateStr(Date.now())) + 'T00:00:00');
       let weekPcts = [];
       for (let offset = 0; offset >= -52; offset--) {
         const wDays = getWeekDays(offset);
@@ -3716,7 +3565,7 @@
     // --- Render: Habit Tracker Grid ---
     function renderHabitTracker() {
       const weekDays = getWeekDays(habitWeekOffset);
-      const today = todayStr();
+      const today = FN.dateStr(Date.now());
       const grid = document.getElementById('habit-grid');
       const statsRow = document.getElementById('habit-stats-row');
 
@@ -4046,7 +3895,7 @@
           id: 'h_' + Date.now(),
           name: name,
           frequency: freq,
-          createdAt: todayStr(),
+          createdAt: FN.dateStr(Date.now()),
           archived: false,
           updatedAt: Date.now()
         });

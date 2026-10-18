@@ -469,5 +469,5 @@ function httpBackend(url, token, opts) {
   };
 }
 
-return { createSync, firebaseBackend, httpBackend, rootFor, FIREBASE_CONFIG };
+return { createSync, firebaseBackend, httpBackend };
 });

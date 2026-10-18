@@ -165,7 +165,7 @@ check('phone: settings ask for the setup key', await P.ev(`document.getElementBy
   await P.ev(`[document.getElementById('sync-pass').placeholder, document.getElementById('sync-save').textContent]`));
 check('phone: the sync line says nothing leaves the phone', /Nothing leaves this phone/.test(await P.ev(`document.getElementById('sync-status').textContent`)), await P.ev(`document.getElementById('sync-status').textContent`));
 check('phone: hotkey, login and keyboard sections hidden', await P.ev(`[...document.querySelectorAll('.desk-only')].every(e => getComputedStyle(e).display === 'none')`), null);
-check('phone: the settings box fits the screen', await P.ev(`(() => { const b = document.querySelector('#settings-overlay .onboarding-card, #settings-overlay > *').getBoundingClientRect(); return b.left >= 0 && b.right <= 390; })()`), null);
+check('phone: the settings box fits the screen', await P.ev(`(() => { const b = document.querySelector('#settings-overlay .settings-card').getBoundingClientRect(); return b.left >= 0 && b.right <= 390; })()`), null);
 await tap('#sync-pass');
 await P.send('Input.insertText', { text: KEY });
 await tap('#sync-save');

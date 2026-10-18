@@ -610,7 +610,6 @@ ipcMain.on('pause-hotkey', (_e, on) => {
 });
 ipcMain.on('minimize', () => mainWindow && mainWindow.minimize());
 ipcMain.on('close', () => mainWindow && mainWindow.hide());
-ipcMain.on('quit', () => app.quit());
 
 ipcMain.on('capture-submit', (_e, raw) => {
   if (typeof raw === 'string' && raw.trim() && mainWindow && !mainWindow.isDestroyed()) {

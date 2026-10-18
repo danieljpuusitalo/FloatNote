@@ -224,10 +224,6 @@
       .sort((a, b) => (a.touchedAt || 0) - (b.touchedAt || 0));
   }
 
-  function needsTriage(state, now) {
-    return staleItems(state, now).length >= TRIAGE_THRESHOLD;
-  }
-
   // Next: dated first (soonest first), then undated, newest first.
   function compareNext(a, b) {
     if (a.due && b.due) return a.due < b.due ? -1 : a.due > b.due ? 1 : (b.createdAt || 0) - (a.createdAt || 0);
@@ -536,11 +532,6 @@
     const cutoff = now - (days || 180) * DAY_MS;
     for (const k of Object.keys(seen)) if (!seen[k] || !(seen[k].t >= cutoff)) delete seen[k];
     return seen;
-  }
-
-  // The suggestions alone, with nothing remembered between calls.
-  function ingestSuggestions(state, payload, now) {
-    return ingestInbox(state, payload, now, {}).added;
   }
 
   // ---------- nothing rots (docs/INTAKE.md) ----------
@@ -1014,11 +1005,11 @@
     dateStr, isDateStr, parseDateStr, daysBetween, addDays,
     newId, stableStringify, hash, clone,
     parseDateWord, parseCapture,
-    makeItem, moveItem, isDone, isVisible, isStale, staleItems, needsTriage,
+    makeItem, moveItem, isDone, isVisible, isStale, staleItems,
     compareNext, listItems, openCount, todayCapOf,
     completeItem, uncompleteItem, doneOn, streak,
     startDay, needsPick, carryOvers,
-    ingestSuggestions, ingestInbox, suggestionKey, pruneSeen, recordRun, runStatus,
+    ingestInbox, suggestionKey, pruneSeen, recordRun, runStatus,
     KINDS, SUGGESTION_DAYS, SLIDE_DAYS, DECISIONS,
     pendingSuggestions, expireSuggestions, slideToLater, weekStart, slidToReport, fromCollector, decisionEntry,
     emptyState, normalizeState, isV1, migrateV1, freshFromV1,

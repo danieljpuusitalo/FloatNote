@@ -38,7 +38,11 @@ byte-identical, and it checks the desktop page kept its hover and settings.
 Screenshots land in the scratch dir it prints. **Any change to `index.html` needs
 this run as well as a desktop look**: the same file is both UIs now.
 
-Both hand-checks run against a deployed Worker with `FLOATNOTE_CHECK_URL` and
+`node tools/check-notes.mjs` drives the Notes editor's formatting (Ctrl+L,
+Ctrl+Shift+L, Ctrl+H, the right-click menu, the markdown shortcuts) in a real window
+on scratch data. Run it after any change to the Notes code.
+
+The two sync hand-checks run against a deployed Worker with `FLOATNOTE_CHECK_URL` and
 `FLOATNOTE_SETUP_KEY` set (staging's key is in `~/.floatnote-staging-setup-key`;
 read it into the variable, never print it). Do run them there after a server
 change: staging keeps every earlier run's records, which is how the `t 0` tie bug
